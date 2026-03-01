@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QWheelEvent>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QFileInfo>
 #include <QPixmap>
 #include <QDebug>
@@ -19,6 +20,7 @@ ReaderScreen::ReaderScreen(QWidget* parent)
     , totalPages(0)
     , currentFontSize(12)
     , bookOpen(false)
+    , topBarVisible(true)
 {
     setupUI();
     setFocusPolicy(Qt::StrongFocus);
@@ -35,6 +37,7 @@ void ReaderScreen::setupUI()
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
+    // ── Topbar ───────────────────────────────────────────────────────────────
     topBar = new QWidget(this);
     topBar->setFixedHeight(50);
     topBar->setStyleSheet("background-color: #1e6432;");
@@ -42,7 +45,7 @@ void ReaderScreen::setupUI()
     QHBoxLayout* topLayout = new QHBoxLayout(topBar);
     topLayout->setContentsMargins(10, 5, 10, 5);
 
-    backButton = new QPushButton(QString::fromUtf8("\xe2\x86\x90"), topBar);
+    backButton = new QPushButton(QString::fromUtf8("←"), topBar);
     backButton->setFixedSize(40, 40);
     backButton->setStyleSheet(
         "QPushButton { background: transparent; color: white; font-size: 24px; border: none; }"
@@ -74,6 +77,7 @@ void ReaderScreen::setupUI()
 
     mainLayout->addWidget(topBar);
 
+    // ── Área da página ────────────────────────────────────────────────────────
     pageDisplay = new QLabel(this);
     pageDisplay->setAlignment(Qt::AlignCenter);
     pageDisplay->setStyleSheet("background-color: #1a1a1a;");
@@ -81,6 +85,8 @@ void ReaderScreen::setupUI()
 
     mainLayout->addWidget(pageDisplay, 1);
 }
+
+// ── Abertura / Fechamento ─────────────────────────────────────────────────────
 
 void ReaderScreen::openBook(const QString& filePath)
 {
@@ -91,15 +97,21 @@ void ReaderScreen::openBook(const QString& filePath)
     currentTitle = info.completeBaseName();
 
     if (renderer->openPDF(filePath)) {
-        bookOpen = true;
+        bookOpen   = true;
         totalPages = renderer->getPageCount();
-        currentPage = progressManager->getLastPage(currentTitle);
 
+        // FIX: recupera página salva corretamente
+        currentPage = progressManager->getLastPage(currentTitle);
         if (currentPage < 0 || currentPage >= totalPages) {
             currentPage = 0;
         }
 
         titleLabel->setText(currentTitle);
+
+        // Garante que topbar aparece ao abrir livro
+        topBar->show();
+        topBarVisible = true;
+
         renderCurrentPage();
         setFocus();
     } else {
@@ -112,21 +124,29 @@ void ReaderScreen::openBook(const QString& filePath)
 void ReaderScreen::closeBook()
 {
     if (bookOpen) {
+        // FIX: salva progresso ao fechar
         progressManager->saveProgress(currentTitle, currentPage);
         renderer->closePDF();
         cache->clearCache();
-        bookOpen = false;
+        bookOpen    = false;
         currentPage = 0;
-        totalPages = 0;
+        totalPages  = 0;
         pageDisplay->clear();
         titleLabel->clear();
         pageInfoLabel->clear();
     }
 }
 
+// ── Renderização ──────────────────────────────────────────────────────────────
+
 void ReaderScreen::renderCurrentPage()
 {
     if (!bookOpen || currentPage < 0 || currentPage >= totalPages) return;
+
+    // FIX fontSize: o botão Aa agora multiplica a área de renderização,
+    //   assim o MuPDF gera mais pixels → texto maior e mais nítido.
+    //   Scale factor: 12pt = 1.0x, 16pt = 1.33x
+    float fontScale = (currentFontSize == 16) ? 1.33f : 1.0f;
 
     QPixmap* cached = cache->getCachedPage(currentPage);
     if (cached) {
@@ -134,9 +154,13 @@ void ReaderScreen::renderCurrentPage()
             pageDisplay->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation
         ));
     } else {
-        int w = pageDisplay->width() > 0 ? pageDisplay->width() : 800;
+        int w = pageDisplay->width()  > 0 ? pageDisplay->width()  : 800;
         int h = pageDisplay->height() > 0 ? pageDisplay->height() : 600;
-        QPixmap pageImage = renderer->renderPage(currentPage, w, h);
+
+        // Passa dimensões escaladas pelo fator de fonte
+        QPixmap pageImage = renderer->renderPage(currentPage,
+                                                  qRound(w * fontScale),
+                                                  qRound(h * fontScale));
 
         if (!pageImage.isNull()) {
             cache->cachePageImage(currentPage, pageImage);
@@ -149,6 +173,7 @@ void ReaderScreen::renderCurrentPage()
     }
 
     updatePageInfo();
+    // FIX: salva progresso a cada troca de página
     progressManager->saveProgress(currentTitle, currentPage);
 }
 
@@ -156,6 +181,27 @@ void ReaderScreen::updatePageInfo()
 {
     pageInfoLabel->setText(QString("%1/%2").arg(currentPage + 1).arg(totalPages));
 }
+
+// ── Cor do menu (topbar) ──────────────────────────────────────────────────────
+
+void ReaderScreen::setMenuColor(const QColor& color)
+{
+    topBar->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+}
+
+// ── Topbar some / aparece ao tocar na tela ────────────────────────────────────
+
+void ReaderScreen::mousePressEvent(QMouseEvent* event)
+{
+    // FIX: toque fora da topbar alterna sua visibilidade
+    if (!topBar->geometry().contains(event->pos())) {
+        topBarVisible = !topBarVisible;
+        topBar->setVisible(topBarVisible);
+    }
+    QWidget::mousePressEvent(event);
+}
+
+// ── Navegação ─────────────────────────────────────────────────────────────────
 
 void ReaderScreen::onPreviousPage()
 {
@@ -173,6 +219,7 @@ void ReaderScreen::onNextPage()
     }
 }
 
+// FIX: limpa cache ao trocar tamanho de fonte, para forçar re-render em nova escala
 void ReaderScreen::onToggleFontSize()
 {
     currentFontSize = (currentFontSize == 12) ? 16 : 12;
@@ -185,12 +232,8 @@ void ReaderScreen::onToggleFontSize()
 void ReaderScreen::wheelEvent(QWheelEvent* event)
 {
     if (!bookOpen) return;
-
-    if (event->angleDelta().y() < 0) {
-        onNextPage();
-    } else if (event->angleDelta().y() > 0) {
-        onPreviousPage();
-    }
+    if (event->angleDelta().y() < 0) onNextPage();
+    else                              onPreviousPage();
     event->accept();
 }
 
@@ -200,19 +243,14 @@ void ReaderScreen::keyPressEvent(QKeyEvent* event)
         QWidget::keyPressEvent(event);
         return;
     }
-
     switch (event->key()) {
         case Qt::Key_Right:
         case Qt::Key_Down:
         case Qt::Key_PageDown:
-        case Qt::Key_Space:
-            onNextPage();
-            break;
+        case Qt::Key_Space:    onNextPage();     break;
         case Qt::Key_Left:
         case Qt::Key_Up:
-        case Qt::Key_PageUp:
-            onPreviousPage();
-            break;
+        case Qt::Key_PageUp:   onPreviousPage(); break;
         case Qt::Key_Home:
             currentPage = 0;
             renderCurrentPage();

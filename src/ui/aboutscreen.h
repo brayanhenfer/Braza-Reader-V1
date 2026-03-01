@@ -4,6 +4,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QLabel>
+#include <QColor>
 
 class AboutScreen : public QWidget
 {
@@ -13,6 +14,8 @@ public:
     explicit AboutScreen(QWidget* parent = nullptr);
     ~AboutScreen();
 
+    void setMenuColor(const QColor& color);  // NOVO
+
 signals:
     void menuClicked();
 
@@ -20,7 +23,7 @@ private:
     void setupUI();
 
     QVBoxLayout* mainLayout;
-    QWidget* topBar;
+    QWidget*     topBar;
     QPushButton* menuButton;
-    QLabel* titleLabel;
+    QLabel*      titleLabel;
 };

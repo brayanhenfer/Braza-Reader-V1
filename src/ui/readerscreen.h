@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QColor>
 #include <memory>
 
 class PDFRenderer;
@@ -21,6 +22,7 @@ public:
 
     void openBook(const QString& filePath);
     void closeBook();
+    void setMenuColor(const QColor& color);
 
 signals:
     void backClicked();
@@ -28,6 +30,7 @@ signals:
 protected:
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;  // NOVO: toque esconde topbar
 
 private slots:
     void onPreviousPage();
@@ -40,21 +43,22 @@ private:
     void updatePageInfo();
 
     QVBoxLayout* mainLayout;
-    QWidget* topBar;
+    QWidget*     topBar;
     QPushButton* backButton;
-    QLabel* titleLabel;
-    QLabel* pageInfoLabel;
+    QLabel*      titleLabel;
+    QLabel*      pageInfoLabel;
     QPushButton* fontSizeButton;
-    QLabel* pageDisplay;
+    QLabel*      pageDisplay;
 
-    std::unique_ptr<PDFRenderer> renderer;
-    std::unique_ptr<PDFCache> cache;
+    std::unique_ptr<PDFRenderer>    renderer;
+    std::unique_ptr<PDFCache>       cache;
     std::unique_ptr<ProgressManager> progressManager;
 
     QString currentFilePath;
     QString currentTitle;
-    int currentPage;
-    int totalPages;
-    int currentFontSize;
-    bool bookOpen;
+    int     currentPage;
+    int     totalPages;
+    int     currentFontSize;
+    bool    bookOpen;
+    bool    topBarVisible;   // NOVO: controla visibilidade da topbar
 };

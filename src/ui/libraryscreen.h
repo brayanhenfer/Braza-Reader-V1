@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QStringList>
+#include <QColor>
 #include <memory>
 
 class LibraryManager;
@@ -24,6 +25,7 @@ public:
     void loadLibrary();
     void showFavorites();
     void showAllBooks();
+    void setMenuColor(const QColor& color);
 
 signals:
     void menuClicked();
@@ -32,6 +34,7 @@ signals:
 private slots:
     void onBookClicked(const QString& filePath);
     void onFavoriteToggled(const QString& bookTitle);
+    void onRenameBook(const QString& filePath);         // NOVO
 
 private:
     void setupUI();
@@ -39,18 +42,18 @@ private:
     void addBookCard(const QString& filePath, int row, int col);
     QString extractTitle(const QString& filePath) const;
 
-    QVBoxLayout* mainLayout;
-    QWidget* topBar;
-    QPushButton* menuButton;
-    QLabel* titleLabel;
-    QScrollArea* scrollArea;
-    QWidget* gridContainer;
-    QGridLayout* gridLayout;
+    QVBoxLayout*  mainLayout;
+    QWidget*      topBar;
+    QPushButton*  menuButton;
+    QLabel*       titleLabel;
+    QScrollArea*  scrollArea;
+    QWidget*      gridContainer;
+    QGridLayout*  gridLayout;
 
-    std::unique_ptr<LibraryManager> libraryManager;
+    std::unique_ptr<LibraryManager>  libraryManager;
     std::unique_ptr<FavoriteManager> favoriteManager;
     std::unique_ptr<ProgressManager> progressManager;
 
-    bool showingFavorites;
+    bool        showingFavorites;
     QStringList currentBooks;
 };

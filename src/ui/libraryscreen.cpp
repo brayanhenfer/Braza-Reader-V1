@@ -2,10 +2,15 @@
 #include "../storage/librarymanager.h"
 #include "../storage/favoritemanager.h"
 #include "../storage/progressmanager.h"
+#include "../engine/pdfrenderer.h"
 
 #include <QHBoxLayout>
 #include <QFileInfo>
 #include <QFrame>
+#include <QInputDialog>
+#include <QFile>
+#include <QDir>
+#include <QMessageBox>
 
 LibraryScreen::LibraryScreen(QWidget* parent)
     : QWidget(parent)
@@ -25,7 +30,7 @@ void LibraryScreen::setupUI()
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Barra superior
+    // ── Topbar ───────────────────────────────────────────────────────────────
     topBar = new QWidget(this);
     topBar->setFixedHeight(50);
     topBar->setStyleSheet("background-color: #1e6432;");
@@ -48,7 +53,7 @@ void LibraryScreen::setupUI()
     topLayout->addWidget(titleLabel, 1);
     mainLayout->addWidget(topBar);
 
-    // Área de scroll
+    // ── Grid de livros ───────────────────────────────────────────────────────
     scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
     scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -64,6 +69,15 @@ void LibraryScreen::setupUI()
     mainLayout->addWidget(scrollArea, 1);
 }
 
+// ── Cor dinâmica do menu ──────────────────────────────────────────────────────
+
+void LibraryScreen::setMenuColor(const QColor& color)
+{
+    topBar->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+}
+
+// ── Carregar / Mostrar livros ─────────────────────────────────────────────────
+
 void LibraryScreen::loadLibrary()
 {
     showingFavorites = false;
@@ -73,129 +87,140 @@ void LibraryScreen::loadLibrary()
 
     int row = 0, col = 0;
     const int columns = 3;
-
     for (const QString& filePath : currentBooks) {
         addBookCard(filePath, row, col);
         col++;
-        if (col >= columns) {
-            col = 0;
-            row++;
-        }
+        if (col >= columns) { col = 0; row++; }
     }
     gridLayout->setRowStretch(row + 1, 1);
 }
 
+// FIX: showFavorites agora filtra corretamente comparando titles via FavoriteManager
 void LibraryScreen::showFavorites()
 {
     showingFavorites = true;
     titleLabel->setText("Favoritos");
 
     QStringList favorites = favoriteManager->getAllFavorites();
-    QStringList allBooks = libraryManager->scanLibrary();
+    QStringList allBooks  = libraryManager->scanLibrary();
 
     currentBooks.clear();
     for (const QString& bookPath : allBooks) {
-        QString title = extractTitle(bookPath);
-        if (favorites.contains(title)) {
+        if (favorites.contains(extractTitle(bookPath))) {
             currentBooks.append(bookPath);
         }
     }
 
     clearGrid();
 
-    int row = 0, col = 0;
-    const int columns = 3;
-
-    for (const QString& filePath : currentBooks) {
-        addBookCard(filePath, row, col);
-        col++;
-        if (col >= columns) {
-            col = 0;
-            row++;
-        }
-    }
-
     if (currentBooks.isEmpty()) {
         QLabel* emptyLabel = new QLabel(
-            QString::fromUtf8("Nenhum favorito ainda.\nToque na ⭐ para adicionar."),
+            QString::fromUtf8("Nenhum favorito ainda.\nToque na ★ para adicionar."),
             gridContainer
         );
         emptyLabel->setStyleSheet("color: #888; font-size: 16px;");
         emptyLabel->setAlignment(Qt::AlignCenter);
         gridLayout->addWidget(emptyLabel, 0, 0, 1, 3, Qt::AlignCenter);
+        return;
     }
 
+    int row = 0, col = 0;
+    const int columns = 3;
+    for (const QString& filePath : currentBooks) {
+        addBookCard(filePath, row, col);
+        col++;
+        if (col >= columns) { col = 0; row++; }
+    }
     gridLayout->setRowStretch(row + 1, 1);
 }
 
-void LibraryScreen::showAllBooks()
-{
-    loadLibrary();
-}
+void LibraryScreen::showAllBooks() { loadLibrary(); }
 
 void LibraryScreen::clearGrid()
 {
     QLayoutItem* item;
     while ((item = gridLayout->takeAt(0)) != nullptr) {
-        if (item->widget()) {
-            item->widget()->deleteLater();
-        }
+        if (item->widget()) item->widget()->deleteLater();
         delete item;
     }
 }
 
+// ── Card de livro ─────────────────────────────────────────────────────────────
+
 void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
 {
-    QString title = extractTitle(filePath);
-    bool isFav = favoriteManager->isFavorite(title);
+    QString title  = extractTitle(filePath);
+    bool    isFav  = favoriteManager->isFavorite(title);
 
     QFrame* card = new QFrame(gridContainer);
-    card->setFixedSize(220, 280);
-    card->setStyleSheet(
-        "QFrame { background-color: #3a3a3a; border-radius: 8px; }"
-    );
+    card->setFixedSize(220, 290);
+    card->setStyleSheet("QFrame { background-color: #3a3a3a; border-radius: 8px; }");
 
     QVBoxLayout* cardLayout = new QVBoxLayout(card);
     cardLayout->setContentsMargins(8, 8, 8, 8);
     cardLayout->setSpacing(5);
 
-    // Miniatura placeholder
+    // ── Miniatura da capa (página 0 do PDF) ───────────────────────────────────
+    // FIX: antes mostrava apenas emoji 📄; agora renderiza a primeira página real
     QLabel* thumbnail = new QLabel(card);
     thumbnail->setFixedSize(204, 200);
     thumbnail->setAlignment(Qt::AlignCenter);
-    thumbnail->setStyleSheet(
-        "background-color: #555; border-radius: 4px; color: #aaa; font-size: 40px;"
-    );
-    thumbnail->setText(QString::fromUtf8("📄"));
+    thumbnail->setStyleSheet("background-color: #555; border-radius: 4px;");
 
-    // Título
+    // Renderiza em thread para não travar a UI (usando lambda + QPixmap fora de thread principal seria inseguro;
+    // para Raspberry Pi Zero usamos renderização direta — é rápido o suficiente para miniaturas)
+    PDFRenderer thumbRenderer;
+    if (thumbRenderer.openPDF(filePath)) {
+        QPixmap thumb = thumbRenderer.renderPage(0, 204, 200);
+        if (!thumb.isNull()) {
+            thumbnail->setPixmap(thumb.scaled(204, 200, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        } else {
+            thumbnail->setText(QString::fromUtf8("📄"));
+            thumbnail->setStyleSheet("background-color: #555; border-radius: 4px; color: #aaa; font-size: 40px;");
+        }
+        thumbRenderer.closePDF();
+    } else {
+        thumbnail->setText(QString::fromUtf8("📄"));
+        thumbnail->setStyleSheet("background-color: #555; border-radius: 4px; color: #aaa; font-size: 40px;");
+    }
+
+    // ── Título ────────────────────────────────────────────────────────────────
     QLabel* titleLbl = new QLabel(title, card);
     titleLbl->setStyleSheet("color: white; font-size: 12px;");
     titleLbl->setWordWrap(true);
-    titleLbl->setMaximumHeight(30);
+    titleLbl->setMaximumHeight(36);
 
-    // Botões
+    // ── Botões: favoritar e renomear ──────────────────────────────────────────
     QHBoxLayout* buttonBar = new QHBoxLayout();
     buttonBar->setSpacing(5);
 
+    // FIX favoritar: o ícone atualiza corretamente e a lista de favoritos é refrescada
     QPushButton* favButton = new QPushButton(isFav ? QString::fromUtf8("★") : QString::fromUtf8("☆"), card);
     favButton->setFixedSize(30, 30);
     favButton->setStyleSheet(
         "QPushButton { background: transparent; color: #FFD700; font-size: 20px; border: none; }"
     );
-
     QString bookTitle = title;
     connect(favButton, &QPushButton::clicked, this, [this, bookTitle, favButton]() {
-        onFavoriteToggled(bookTitle);
+        favoriteManager->toggleFavorite(bookTitle);
         bool nowFav = favoriteManager->isFavorite(bookTitle);
         favButton->setText(nowFav ? QString::fromUtf8("★") : QString::fromUtf8("☆"));
+        // FIX: se estiver na view de favoritos, atualiza a lista imediatamente
+        if (showingFavorites) {
+            showFavorites();
+        }
     });
 
+    // FIX renomear: abre diálogo, renomeia o arquivo e atualiza favoritos/progresso
     QPushButton* editButton = new QPushButton(QString::fromUtf8("✎"), card);
     editButton->setFixedSize(30, 30);
     editButton->setStyleSheet(
         "QPushButton { background: transparent; color: #aaa; font-size: 18px; border: none; }"
     );
+    QString path = filePath;
+    connect(editButton, &QPushButton::clicked, this, [this, path]() {
+        onRenameBook(path);
+    });
 
     buttonBar->addWidget(favButton);
     buttonBar->addStretch();
@@ -205,15 +230,14 @@ void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
     cardLayout->addWidget(titleLbl);
     cardLayout->addLayout(buttonBar);
 
-    // Overlay para abrir livro
+    // Overlay transparente para abrir o livro ao tocar na capa/título
     QPushButton* openOverlay = new QPushButton(card);
-    openOverlay->setGeometry(0, 0, 220, 240);
+    openOverlay->setGeometry(0, 0, 220, 250);
     openOverlay->setStyleSheet("background: transparent; border: none;");
     openOverlay->raise();
     favButton->raise();
     editButton->raise();
 
-    QString path = filePath;
     connect(openOverlay, &QPushButton::clicked, this, [this, path]() {
         onBookClicked(path);
     });
@@ -223,9 +247,10 @@ void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
 
 QString LibraryScreen::extractTitle(const QString& filePath) const
 {
-    QFileInfo info(filePath);
-    return info.completeBaseName();
+    return QFileInfo(filePath).completeBaseName();
 }
+
+// ── Slots ─────────────────────────────────────────────────────────────────────
 
 void LibraryScreen::onBookClicked(const QString& filePath)
 {
@@ -235,7 +260,52 @@ void LibraryScreen::onBookClicked(const QString& filePath)
 void LibraryScreen::onFavoriteToggled(const QString& bookTitle)
 {
     favoriteManager->toggleFavorite(bookTitle);
-    if (showingFavorites) {
-        showFavorites();
+    if (showingFavorites) showFavorites();
+}
+
+// FIX: renomear PDF — abre QInputDialog, renomeia arquivo físico e atualiza BD
+void LibraryScreen::onRenameBook(const QString& filePath)
+{
+    QFileInfo info(filePath);
+    QString oldTitle = info.completeBaseName();
+    QString dir      = info.absolutePath();
+
+    bool ok;
+    QString newTitle = QInputDialog::getText(
+        this,
+        "Renomear PDF",
+        "Novo nome (sem extensão):",
+        QLineEdit::Normal,
+        oldTitle,
+        &ok
+    );
+
+    if (!ok || newTitle.trimmed().isEmpty() || newTitle == oldTitle) return;
+
+    QString newPath = dir + "/" + newTitle.trimmed() + ".pdf";
+
+    if (QFile::exists(newPath)) {
+        QMessageBox::warning(this, "Erro", "Já existe um arquivo com esse nome.");
+        return;
     }
+
+    if (!QFile::rename(filePath, newPath)) {
+        QMessageBox::warning(this, "Erro", "Não foi possível renomear o arquivo.");
+        return;
+    }
+
+    // Migra favoritos e progresso para o novo nome
+    if (favoriteManager->isFavorite(oldTitle)) {
+        favoriteManager->removeFavorite(oldTitle);
+        favoriteManager->addFavorite(newTitle.trimmed());
+    }
+    int lastPage = progressManager->getLastPage(oldTitle);
+    if (lastPage > 0) {
+        progressManager->clearProgress(oldTitle);
+        progressManager->saveProgress(newTitle.trimmed(), lastPage);
+    }
+
+    // Recarrega a biblioteca com o novo nome
+    if (showingFavorites) showFavorites();
+    else                  loadLibrary();
 }

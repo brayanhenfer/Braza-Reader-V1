@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QStackedWidget>
 #include <QTouchEvent>
+#include <QColor>
 #include <memory>
 
 class SidebarMenu;
@@ -10,6 +11,8 @@ class LibraryScreen;
 class ReaderScreen;
 class SettingsScreen;
 class AboutScreen;
+class TermsScreen;
+class SettingsManager;
 
 class MainWindow : public QMainWindow
 {
@@ -19,6 +22,9 @@ public:
     MainWindow(QWidget* parent = nullptr);
     ~MainWindow();
 
+    // Aplica cor do menu em todas as topbars — chamado por SettingsScreen
+    void applyMenuColor(const QColor& color);
+
 protected:
     bool event(QEvent* event) override;
 
@@ -27,9 +33,11 @@ private slots:
     void onNavigateToLibrary();
     void onNavigateToFavorites();
     void onNavigateToSettings();
+    void onNavigateToTerms();
     void onNavigateToAbout();
     void onOpenBook(const QString& filePath);
     void onCloseReader();
+    void onSettingsChanged();   // NOVO: aplica tema dinamicamente
 
 private:
     void setupUI();
@@ -38,14 +46,16 @@ private:
     void toggleSidebar();
     void handleTouchEvent(QTouchEvent* touchEvent);
 
-    QWidget* centralWidget;
-    QStackedWidget* screenStack;
-    SidebarMenu* sidebar;
+    QWidget*         centralWidget;
+    QStackedWidget*  screenStack;
+    SidebarMenu*     sidebar;
 
-    std::unique_ptr<LibraryScreen> libraryScreen;
-    std::unique_ptr<ReaderScreen> readerScreen;
+    std::unique_ptr<LibraryScreen>  libraryScreen;
+    std::unique_ptr<ReaderScreen>   readerScreen;
     std::unique_ptr<SettingsScreen> settingsScreen;
-    std::unique_ptr<AboutScreen> aboutScreen;
+    std::unique_ptr<AboutScreen>    aboutScreen;
+    std::unique_ptr<TermsScreen>    termsScreen;
+    std::unique_ptr<SettingsManager> settingsManager;
 
     bool sidebarOpen;
 };

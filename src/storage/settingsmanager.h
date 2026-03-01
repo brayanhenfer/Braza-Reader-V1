@@ -12,12 +12,15 @@ public:
     ~SettingsManager();
 
     QColor getMenuColor() const;
-    void setMenuColor(const QColor& color);
+    void   setMenuColor(const QColor& color);
+
+    QColor getBgColor() const;       // NOVO
+    void   setBgColor(const QColor& color); // NOVO
 
     bool getNightMode() const;
     void setNightMode(bool enabled);
 
-    int getFontSize() const;
+    int  getFontSize() const;
     void setFontSize(int size);
 
     void resetToDefaults();

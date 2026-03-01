@@ -11,6 +11,12 @@ AboutScreen::AboutScreen(QWidget* parent)
 
 AboutScreen::~AboutScreen() = default;
 
+// NOVO: aplica cor dinâmica do menu na topbar
+void AboutScreen::setMenuColor(const QColor& color)
+{
+    topBar->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+}
+
 void AboutScreen::setupUI()
 {
     mainLayout = new QVBoxLayout(this);
@@ -47,7 +53,6 @@ void AboutScreen::setupUI()
     contentLayout->setContentsMargins(30, 30, 30, 30);
     contentLayout->setSpacing(15);
 
-    // Logo / nome
     QLabel* appName = new QLabel("BrazaReader", content);
     appName->setStyleSheet("color: #4CAF50; font-size: 32px; font-weight: bold;");
     appName->setAlignment(Qt::AlignCenter);
@@ -60,7 +65,6 @@ void AboutScreen::setupUI()
 
     contentLayout->addSpacing(20);
 
-    // Descricao
     QLabel* description = new QLabel(
         "Leitor de PDF minimalista e eficiente,\n"
         "otimizado para dispositivos com\n"
@@ -76,7 +80,6 @@ void AboutScreen::setupUI()
 
     contentLayout->addSpacing(20);
 
-    // Recursos
     QLabel* featuresTitle = new QLabel("Recursos", content);
     featuresTitle->setStyleSheet("color: #4CAF50; font-size: 18px; font-weight: bold;");
     featuresTitle->setAlignment(Qt::AlignCenter);
@@ -99,7 +102,6 @@ void AboutScreen::setupUI()
 
     contentLayout->addSpacing(20);
 
-    // Tecnologias
     QLabel* techTitle = new QLabel("Tecnologias", content);
     techTitle->setStyleSheet("color: #4CAF50; font-size: 18px; font-weight: bold;");
     techTitle->setAlignment(Qt::AlignCenter);
@@ -115,7 +117,6 @@ void AboutScreen::setupUI()
 
     contentLayout->addStretch();
 
-    // Rodape
     QLabel* footer = new QLabel("BrazaReader v1.0.0 - 2026", content);
     footer->setStyleSheet("color: #666; font-size: 11px;");
     footer->setAlignment(Qt::AlignCenter);

@@ -12,17 +12,27 @@ SettingsManager::~SettingsManager() = default;
 
 QColor SettingsManager::getMenuColor() const
 {
-    QString colorStr = settings->value("ui/menu_color", "#1e6432").toString();
-    QColor color(colorStr);
-    if (!color.isValid()) {
-        color = QColor(30, 100, 50);
-    }
-    return color;
+    QString c = settings->value("ui/menu_color", "#1e6432").toString();
+    QColor color(c);
+    return color.isValid() ? color : QColor(30, 100, 50);
 }
 
 void SettingsManager::setMenuColor(const QColor& color)
 {
     settings->setValue("ui/menu_color", color.name());
+    settings->sync();
+}
+
+QColor SettingsManager::getBgColor() const
+{
+    QString c = settings->value("ui/bg_color", "#2b2b2b").toString();
+    QColor color(c);
+    return color.isValid() ? color : QColor(43, 43, 43);
+}
+
+void SettingsManager::setBgColor(const QColor& color)
+{
+    settings->setValue("ui/bg_color", color.name());
     settings->sync();
 }
 
