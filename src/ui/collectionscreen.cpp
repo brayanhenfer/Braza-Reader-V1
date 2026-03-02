@@ -1,4 +1,5 @@
 #include "collectionscreen.h"
+#include "topbar_helper.h"
 #include "../storage/collectionmanager.h"
 #include "../storage/librarymanager.h"
 
@@ -6,6 +7,7 @@
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QVBoxLayout>
+#include <QPixmap>
 
 CollectionScreen::CollectionScreen(QWidget* parent)
     : QWidget(parent)
@@ -20,11 +22,48 @@ CollectionScreen::~CollectionScreen() = default;
 
 void CollectionScreen::setupUI()
 {
-    // CollectionScreen NÃO tem topbar própria.
-    // Ela é embutida como widget dentro de uma aba ou tela que já tem topbar.
     QVBoxLayout* mainLay = new QVBoxLayout(this);
     mainLay->setContentsMargins(0, 0, 0, 0);
     mainLay->setSpacing(0);
+
+    // ── Topbar com logo ───────────────────────────────────────────────────────
+    topBar = new QWidget(this);
+    topBar->setFixedHeight(50);
+    topBar->setStyleSheet("background-color:#1e6432;");
+    QHBoxLayout* topLay = new QHBoxLayout(topBar);
+    topLay->setContentsMargins(8, 4, 8, 4);
+    topLay->setSpacing(6);
+
+    menuBtn = new QPushButton("☰", topBar);
+    menuBtn->setFixedSize(40, 40);
+    menuBtn->setStyleSheet(
+        "QPushButton{background:transparent;color:white;font-size:24px;border:none;}"
+        "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
+    connect(menuBtn, &QPushButton::clicked, this, &CollectionScreen::menuClicked);
+
+    // Logo centralizada
+    logoLabel = new QLabel(topBar);
+    logoLabel->setAlignment(Qt::AlignCenter);
+    QPixmap logoPx(":/logo.png");
+    if (!logoPx.isNull()) {
+        logoLabel->setPixmap(
+            logoPx.scaled(120, 34, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    } else {
+        logoLabel->setText("BrazaReader");
+        logoLabel->setStyleSheet("color:white;font-size:18px;font-weight:bold;");
+    }
+
+    backBtn = new QPushButton("←", topBar);
+    backBtn->setFixedSize(40, 40);
+    backBtn->setStyleSheet(
+        "QPushButton{background:transparent;color:white;font-size:22px;border:none;}"
+        "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
+    connect(backBtn, &QPushButton::clicked, this, &CollectionScreen::backClicked);
+
+    topLay->addWidget(menuBtn);
+    topLay->addWidget(logoLabel, 1);
+    topLay->addWidget(backBtn);
+    mainLay->addWidget(topBar);
 
     // ── Corpo: dois painéis lado a lado ───────────────────────────────────────
     body = new QWidget(this);
@@ -33,7 +72,7 @@ void CollectionScreen::setupUI()
     bodyLay->setContentsMargins(0, 0, 0, 0);
     bodyLay->setSpacing(0);
 
-    // ── Painel esquerdo ───────────────────────────────────────────────────────
+    // ── Painel esquerdo: lista de coleções ─────────────────────────────────────
     QWidget* left = new QWidget(body);
     left->setFixedWidth(210);
     left->setStyleSheet("background:#1e1e1e;border-right:1px solid #444;");
@@ -41,7 +80,7 @@ void CollectionScreen::setupUI()
     leftLay->setContentsMargins(8, 8, 8, 8);
     leftLay->setSpacing(6);
 
-    QLabel* hdr = new QLabel("📁 Minhas Coleções", left);
+    QLabel* hdr = new QLabel("📁  Minhas Coleções", left);
     hdr->setStyleSheet("color:#ccc;font-size:12px;font-weight:bold;padding:4px 0;");
     leftLay->addWidget(hdr);
 
@@ -63,15 +102,19 @@ void CollectionScreen::setupUI()
     leftLay->addWidget(newCollBtn);
 
     QHBoxLayout* actLay = new QHBoxLayout();
-    renameCollBtn = new QPushButton("✎ Renomear", left);
+    renameCollBtn = new QPushButton("✎", left);
+    renameCollBtn->setToolTip("Renomear coleção");
+    renameCollBtn->setFixedHeight(36);
     renameCollBtn->setStyleSheet(
-        "QPushButton{background:#444;color:white;padding:8px;border-radius:6px;font-size:12px;}"
+        "QPushButton{background:#444;color:white;padding:8px;border-radius:6px;font-size:13px;}"
         "QPushButton:pressed{background:#666;}");
     connect(renameCollBtn, &QPushButton::clicked, this, &CollectionScreen::onRenameCollection);
 
-    delCollBtn = new QPushButton("🗑 Excluir", left);
+    delCollBtn = new QPushButton("🗑", left);
+    delCollBtn->setToolTip("Excluir coleção");
+    delCollBtn->setFixedHeight(36);
     delCollBtn->setStyleSheet(
-        "QPushButton{background:#7a1010;color:white;padding:8px;border-radius:6px;font-size:12px;}"
+        "QPushButton{background:#7a1010;color:white;padding:8px;border-radius:6px;font-size:14px;}"
         "QPushButton:pressed{background:#a01010;}");
     connect(delCollBtn, &QPushButton::clicked, this, &CollectionScreen::onDeleteCollection);
 
@@ -81,40 +124,46 @@ void CollectionScreen::setupUI()
 
     bodyLay->addWidget(left);
 
-    // ── Painel direito ────────────────────────────────────────────────────────
+    // ── Painel direito: livros da coleção selecionada ─────────────────────────
     QWidget* right = new QWidget(body);
+    right->setStyleSheet("background:#2b2b2b;");
     QVBoxLayout* rightLay = new QVBoxLayout(right);
     rightLay->setContentsMargins(12, 12, 12, 12);
     rightLay->setSpacing(8);
 
     collectionTitle = new QLabel("← Selecione uma coleção", right);
-    collectionTitle->setStyleSheet("color:#ccc;font-size:15px;font-weight:bold;");
+    collectionTitle->setStyleSheet(
+        "color:#ccc;font-size:15px;font-weight:bold;"
+        "padding:6px;border-bottom:1px solid #444;");
     rightLay->addWidget(collectionTitle);
 
     bookList = new QListWidget(right);
     bookList->setStyleSheet(
         "QListWidget{background:#1a1a1a;color:white;border-radius:6px;border:none;}"
-        "QListWidget::item{padding:11px;border-bottom:1px solid #2a2a2a;}"
+        "QListWidget::item{padding:11px;border-bottom:1px solid #2a2a2a;font-size:13px;}"
         "QListWidget::item:selected{background:#1e6432;}"
         "QListWidget::item:hover{background:#252525;}");
-    connect(bookList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
-        QString path = item->data(Qt::UserRole).toString();
-        if (!path.isEmpty()) emit bookOpened(path);
-    });
+    connect(bookList, &QListWidget::itemDoubleClicked, this,
+        [this](QListWidgetItem* item) {
+            QString path = item->data(Qt::UserRole).toString();
+            if (!path.isEmpty()) emit bookOpened(path);
+        });
     rightLay->addWidget(bookList, 1);
 
     QHBoxLayout* bookActLay = new QHBoxLayout();
-    addBookBtn = new QPushButton("+ Adicionar Livro", right);
+    addBookBtn = new QPushButton("＋  Adicionar Livro", right);
     addBookBtn->setStyleSheet(
-        "QPushButton{background:#1e6432;color:white;padding:9px;border-radius:6px;}"
+        "QPushButton{background:#1e6432;color:white;padding:10px;border-radius:6px;font-size:13px;}"
         "QPushButton:pressed{background:#2a8040;}");
-    connect(addBookBtn, &QPushButton::clicked, this, &CollectionScreen::onAddBookToCollection);
+    connect(addBookBtn, &QPushButton::clicked,
+            this, &CollectionScreen::onAddBookToCollection);
 
-    removeBookBtn = new QPushButton("− Remover", right);
+    removeBookBtn = new QPushButton("－  Remover", right);
     removeBookBtn->setStyleSheet(
-        "QPushButton{background:#444;color:white;padding:9px;border-radius:6px;}"
+        "QPushButton{background:#444;color:white;padding:10px;border-radius:6px;font-size:13px;}"
         "QPushButton:pressed{background:#666;}");
-    connect(removeBookBtn, &QPushButton::clicked, this, &CollectionScreen::onRemoveBookFromCollection);
+    connect(removeBookBtn, &QPushButton::clicked,
+            this, &CollectionScreen::onRemoveBookFromCollection);
 
     bookActLay->addWidget(addBookBtn);
     bookActLay->addWidget(removeBookBtn);
@@ -124,20 +173,34 @@ void CollectionScreen::setupUI()
     mainLay->addWidget(body, 1);
 }
 
-void CollectionScreen::setMenuColor(const QColor&) { /* sem topbar própria */ }
+// ── Cor do menu ───────────────────────────────────────────────────────────────
+
+void CollectionScreen::setMenuColor(const QColor& color)
+{
+    topBar->setStyleSheet(QString("background-color:%1;").arg(color.name()));
+}
 
 void CollectionScreen::setWindowColor(const QColor& color)
 {
     body->setStyleSheet(QString("background:%1;").arg(color.name()));
 }
 
-void CollectionScreen::refresh() { loadCollections(); }
+// ── Dados ─────────────────────────────────────────────────────────────────────
+
+void CollectionScreen::refresh()
+{
+    loadCollections();
+    bookList->clear();
+    collectionTitle->setText("← Selecione uma coleção");
+    currentCollectionId = -1;
+}
 
 void CollectionScreen::loadCollections()
 {
     collectionList->clear();
     for (const auto& c : collManager->getAllCollections()) {
-        QListWidgetItem* item = new QListWidgetItem(QString("📁  %1").arg(c.name), collectionList);
+        auto* item = new QListWidgetItem(
+            QString("📁   %1").arg(c.name), collectionList);
         item->setData(Qt::UserRole, c.id);
     }
 }
@@ -145,32 +208,45 @@ void CollectionScreen::loadCollections()
 void CollectionScreen::onCollectionSelected(QListWidgetItem* item)
 {
     currentCollectionId = item->data(Qt::UserRole).toInt();
-    QString name = item->text().mid(4); // remove "📁  "
+    // Remove prefixo "📁   " (4 chars + espaços)
+    QString name = item->text();
+    // Remove emoji e espaços no início
+    int spaceIdx = name.indexOf("   ");
+    if (spaceIdx >= 0) name = name.mid(spaceIdx + 3);
     showCollectionBooks(currentCollectionId, name);
 }
 
 void CollectionScreen::showCollectionBooks(int id, const QString& name)
 {
-    collectionTitle->setText(QString("📁  %1").arg(name));
+    collectionTitle->setText(QString("📁   %1").arg(name));
     bookList->clear();
 
-    QStringList titles = collManager->getBooksInCollection(id);
+    QStringList titles   = collManager->getBooksInCollection(id);
     QStringList allBooks = libManager->scanLibrary();
 
     for (const QString& title : titles) {
         QString path;
         for (const QString& p : allBooks)
             if (QFileInfo(p).completeBaseName() == title) { path = p; break; }
-        QListWidgetItem* item = new QListWidgetItem(
-            QString("📄  %1").arg(title), bookList);
+
+        auto* item = new QListWidgetItem(
+            QString("📄   %1").arg(title), bookList);
         item->setData(Qt::UserRole, path);
     }
+
+    if (titles.isEmpty()) {
+        auto* empty = new QListWidgetItem(
+            "Nenhum livro nesta coleção.\nClique em + Adicionar Livro.", bookList);
+        empty->setForeground(QColor("#666"));
+        empty->setFlags(Qt::NoItemFlags);
+    }
 }
+
+// ── Ações ─────────────────────────────────────────────────────────────────────
 
 void CollectionScreen::onNewCollection()
 {
     bool ok;
-    // QInputDialog abre teclado virtual em touchscreen
     QString name = QInputDialog::getText(
         this, "Nova Coleção", "Nome da coleção:", QLineEdit::Normal, "", &ok);
     if (ok && !name.trimmed().isEmpty()) {
@@ -181,11 +257,13 @@ void CollectionScreen::onNewCollection()
 
 void CollectionScreen::onDeleteCollection()
 {
-    if (currentCollectionId < 0) return;
-    auto btn = QMessageBox::question(this, "Excluir",
-        "Excluir coleção? Os PDFs não serão removidos do disco.",
-        QMessageBox::Yes | QMessageBox::No);
-    if (btn == QMessageBox::Yes) {
+    if (currentCollectionId < 0) {
+        QMessageBox::information(this, "Aviso", "Selecione uma coleção primeiro.");
+        return;
+    }
+    if (QMessageBox::question(this, "Excluir",
+            "Excluir esta coleção? Os PDFs não serão apagados do disco.",
+            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
         collManager->deleteCollection(currentCollectionId);
         currentCollectionId = -1;
         bookList->clear();
@@ -196,7 +274,10 @@ void CollectionScreen::onDeleteCollection()
 
 void CollectionScreen::onRenameCollection()
 {
-    if (currentCollectionId < 0) return;
+    if (currentCollectionId < 0) {
+        QMessageBox::information(this, "Aviso", "Selecione uma coleção primeiro.");
+        return;
+    }
     bool ok;
     QString name = QInputDialog::getText(
         this, "Renomear", "Novo nome:", QLineEdit::Normal, "", &ok);
@@ -208,25 +289,35 @@ void CollectionScreen::onRenameCollection()
 
 void CollectionScreen::onAddBookToCollection()
 {
-    if (currentCollectionId < 0) return;
+    if (currentCollectionId < 0) {
+        QMessageBox::information(this, "Aviso", "Selecione uma coleção primeiro.");
+        return;
+    }
     QStringList all = libManager->scanLibrary();
     QStringList titles;
     for (const QString& p : all) titles.append(QFileInfo(p).completeBaseName());
+    if (titles.isEmpty()) {
+        QMessageBox::information(this, "Aviso", "Nenhum PDF encontrado na biblioteca.");
+        return;
+    }
     bool ok;
     QString chosen = QInputDialog::getItem(
-        this, "Adicionar Livro", "Escolha:", titles, 0, false, &ok);
+        this, "Adicionar Livro", "Escolha o livro:", titles, 0, false, &ok);
     if (ok && !chosen.isEmpty()) {
         collManager->addBookToCollection(currentCollectionId, chosen);
         if (auto* sel = collectionList->currentItem())
-            showCollectionBooks(currentCollectionId, sel->text().mid(4));
+            onCollectionSelected(sel);
     }
 }
 
 void CollectionScreen::onRemoveBookFromCollection()
 {
     if (currentCollectionId < 0 || !bookList->currentItem()) return;
-    QString title = bookList->currentItem()->text().mid(4); // remove "📄  "
+    QString itemText = bookList->currentItem()->text();
+    int spaceIdx = itemText.indexOf("   ");
+    QString title = spaceIdx >= 0 ? itemText.mid(spaceIdx + 3) : itemText;
+
     collManager->removeBookFromCollection(currentCollectionId, title);
     if (auto* sel = collectionList->currentItem())
-        showCollectionBooks(currentCollectionId, sel->text().mid(4));
+        onCollectionSelected(sel);
 }

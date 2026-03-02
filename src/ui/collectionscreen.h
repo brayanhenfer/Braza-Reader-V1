@@ -25,7 +25,8 @@ public:
     void setWindowColor(const QColor& color);
 
 signals:
-    void menuClicked();
+    void backClicked();        // botão ← volta à biblioteca
+    void menuClicked();        // botão ☰ abre sidebar
     void bookOpened(const QString& filePath);
 
 private slots:
@@ -41,14 +42,18 @@ private:
     void loadCollections();
     void showCollectionBooks(int collectionId, const QString& name);
 
-    QWidget*      topBar;
-    QWidget*      body;
+    // Topbar
+    QWidget*     topBar;
+    QPushButton* backBtn;
+    QPushButton* menuBtn;
+    QLabel*      logoLabel;
 
+    // Corpo
+    QWidget*      body;
     QListWidget*  collectionList;
     QPushButton*  newCollBtn;
     QPushButton*  delCollBtn;
     QPushButton*  renameCollBtn;
-
     QLabel*       collectionTitle;
     QListWidget*  bookList;
     QPushButton*  addBookBtn;

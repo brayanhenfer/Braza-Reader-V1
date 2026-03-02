@@ -154,6 +154,7 @@ set(UI_SOURCES
     src/ui/termsscreen.cpp
     src/ui/collectionscreen.h
     src/ui/collectionscreen.cpp
+    src/ui/topbar_helper.h
 
 )
 

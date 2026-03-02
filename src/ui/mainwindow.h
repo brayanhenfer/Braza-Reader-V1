@@ -25,12 +25,13 @@ public:
 
 protected:
     bool event(QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void onMenuClicked();
     void onNavigateToLibrary();
     void onNavigateToFavorites();
-    void onNavigateToCollections();   // NOVO
+    void onNavigateToCollections();
     void onNavigateToSettings();
     void onNavigateToTerms();
     void onNavigateToAbout();
@@ -43,12 +44,16 @@ private:
     void connectSignals();
     void applyTheme();
     void toggleSidebar();
-    void handleTouchEvent(QTouchEvent* touchEvent);
     void closeSidebar();
+    void handleTouchEvent(QTouchEvent* touchEvent);
 
     QWidget*         centralWidget;
     QStackedWidget*  screenStack;
     SidebarMenu*     sidebar;
+
+    // Overlay âmbar: cobre TODA a tela (topbars, menus, leitor)
+    QWidget*         amberOverlay      = nullptr;
+    // Overlay de brilho
     QWidget*         brightnessOverlay = nullptr;
 
     std::unique_ptr<LibraryScreen>    libraryScreen;
@@ -56,7 +61,7 @@ private:
     std::unique_ptr<SettingsScreen>   settingsScreen;
     std::unique_ptr<AboutScreen>      aboutScreen;
     std::unique_ptr<TermsScreen>      termsScreen;
-    std::unique_ptr<CollectionScreen> collectionScreen;  // NOVO: tela própria
+    std::unique_ptr<CollectionScreen> collectionScreen;
     std::unique_ptr<SettingsManager>  settingsManager;
 
     bool sidebarOpen = false;

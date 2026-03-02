@@ -6,7 +6,8 @@
 #include <QColorDialog>
 #include <QGroupBox>
 #include <QScrollArea>
-#include <cstdlib>
+#include <QFrame>
+#include <QProcess>
 
 SettingsScreen::SettingsScreen(QWidget* parent)
     : QWidget(parent)
@@ -18,24 +19,106 @@ SettingsScreen::SettingsScreen(QWidget* parent)
 
 SettingsScreen::~SettingsScreen() = default;
 
+// ── Helpers internos ──────────────────────────────────────────────────────────
+
+static QGroupBox* makeGroup(const QString& title, QWidget* parent)
+{
+    auto* g = new QGroupBox(title, parent);
+    g->setStyleSheet(
+        "QGroupBox{color:white;font-size:14px;font-weight:bold;"
+        "border:1px solid #555;border-radius:8px;margin-top:10px;padding-top:14px;}"
+        "QGroupBox::title{subcontrol-origin:margin;left:14px;padding:0 5px;}");
+    return g;
+}
+
+static QPushButton* makeColorBtn(const QString& text, QWidget* parent)
+{
+    auto* b = new QPushButton(text, parent);
+    b->setStyleSheet(
+        "QPushButton{background:#444;color:white;padding:10px 16px;"
+        "border-radius:6px;font-size:13px;}"
+        "QPushButton:pressed{background:#666;}");
+    return b;
+}
+
+// Detecta o output de vídeo ativo via xrandr e retorna o nome (ex: "HDMI-1")
+static QString detectXrandrOutput()
+{
+    QProcess p;
+    p.start("xrandr", {"--query"});
+    p.waitForFinished(2000);
+    QString out = p.readAllStandardOutput();
+    // Procura primeira linha com " connected"
+    for (const QString& line : out.split('\n')) {
+        if (line.contains(" connected")) {
+            return line.split(' ').first();
+        }
+    }
+    // Fallback: lista comum de outputs do RPi
+    return "";
+}
+
+// Aplica rotação via xrandr (X11) ou wlr-randr (Wayland)
+static void applyRotation(const QString& xrandrArg, const QString& wlrArg)
+{
+    // 1. Tenta wlr-randr (Wayland/kmsdrm moderno)
+    {
+        QProcess p;
+        p.start("wlr-randr", {"--output", "HDMI-A-1", "--transform", wlrArg});
+        if (p.waitForFinished(1500) && p.exitCode() == 0) return;
+    }
+
+    // 2. Tenta xrandr com detecção automática do output
+    QString output = detectXrandrOutput();
+    if (!output.isEmpty()) {
+        QProcess p;
+        p.start("xrandr", {"--output", output, "--rotate", xrandrArg});
+        if (p.waitForFinished(2000) && p.exitCode() == 0) return;
+    }
+
+    // 3. Tenta outputs comuns do RPi manualmente
+    QStringList outputs = {"HDMI-1","HDMI-2","DSI-1","LVDS-1","DPI-1","Composite-1"};
+    for (const QString& o : outputs) {
+        QProcess p;
+        p.start("xrandr", {"--output", o, "--rotate", xrandrArg});
+        if (p.waitForFinished(1500) && p.exitCode() == 0) return;
+    }
+
+    // 4. Último recurso: fbcon via /sys (funciona sem Xorg)
+    // echo 1 > /sys/class/graphics/fbcon/rotate_all  (0=normal,1=CW,2=UD,3=CCW)
+    QString fbRot = "0";
+    if      (xrandrArg == "normal")   fbRot = "0";
+    else if (xrandrArg == "right")    fbRot = "1";
+    else if (xrandrArg == "inverted") fbRot = "2";
+    else if (xrandrArg == "left")     fbRot = "3";
+
+    QProcess p;
+    p.start("bash", {"-c",
+        QString("echo %1 > /sys/class/graphics/fbcon/rotate_all 2>/dev/null || "
+                "echo %1 > /sys/class/graphics/fbcon/rotate 2>/dev/null")
+        .arg(fbRot)});
+    p.waitForFinished(1000);
+}
+
+// ── Setup UI ──────────────────────────────────────────────────────────────────
+
 void SettingsScreen::setupUI()
 {
     QVBoxLayout* mainLay = new QVBoxLayout(this);
     mainLay->setContentsMargins(0, 0, 0, 0);
     mainLay->setSpacing(0);
 
-    // ── Topbar com logo ───────────────────────────────────────────────────────
+    // Topbar
     menuBtn = new QPushButton("☰");
     menuBtn->setFixedSize(40, 40);
     menuBtn->setStyleSheet(
         "QPushButton{background:transparent;color:white;font-size:24px;border:none;}"
         "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
     connect(menuBtn, &QPushButton::clicked, this, &SettingsScreen::menuClicked);
-
     topBar = TopBarHelper::create(this, menuBtn);
     mainLay->addWidget(topBar);
 
-    // ── Scroll ───────────────────────────────────────────────────────────────
+    // ScrollArea com grupos
     QScrollArea* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setStyleSheet("QScrollArea{border:none;background:#2b2b2b;}");
@@ -46,102 +129,94 @@ void SettingsScreen::setupUI()
     cLay->setContentsMargins(16, 16, 16, 16);
     cLay->setSpacing(16);
 
-    // Helper para criar grupos
-    auto makeGroup = [&](const QString& title) -> QGroupBox* {
-        QGroupBox* g = new QGroupBox(title, content);
-        g->setStyleSheet(
-            "QGroupBox{color:white;font-size:14px;font-weight:bold;"
-            "border:1px solid #555;border-radius:8px;margin-top:10px;padding-top:15px;}"
-            "QGroupBox::title{subcontrol-origin:margin;left:15px;padding:0 5px;}");
-        return g;
-    };
-    // Helper para criar botão de cor com preview
-    auto makeColorRow = [&](QWidget* parent, const QString& btnText,
-                             QLabel*& preview, const QColor& initial,
-                             std::function<void(QColor)> onPick) -> QHBoxLayout*
-    {
-        QHBoxLayout* row = new QHBoxLayout();
-        preview = new QLabel(parent);
-        preview->setFixedSize(36, 36);
-        preview->setStyleSheet(
-            QString("background:%1;border-radius:4px;border:2px solid #888;").arg(initial.name()));
-
-        QPushButton* btn = new QPushButton(btnText, parent);
-        btn->setStyleSheet(
-            "QPushButton{background:#444;color:white;padding:10px 16px;border-radius:6px;font-size:13px;}"
-            "QPushButton:pressed{background:#555;}");
-        connect(btn, &QPushButton::clicked, this, [onPick, initial, preview]() {
-            QColor c = QColorDialog::getColor(initial, nullptr, "Escolher Cor");
-            if (c.isValid()) {
-                onPick(c);
-                preview->setStyleSheet(
-                    QString("background:%1;border-radius:4px;border:2px solid #888;").arg(c.name()));
-            }
-        });
-        row->addWidget(preview);
-        row->addWidget(btn, 1);
-        return row;
-    };
-
     // ── Cor do Menu ───────────────────────────────────────────────────────────
     {
-        QGroupBox* g = makeGroup("Cor do Menu (Topbar)");
-        QVBoxLayout* gl = new QVBoxLayout(g);
-        gl->addLayout(makeColorRow(g, "Escolher Cor do Menu",
-            menuColorPreview, settingsManager->getMenuColor(),
-            [this](QColor c) {
+        auto* g  = makeGroup("Cor do Menu (Topbar)", content);
+        auto* gl = new QHBoxLayout(g);
+        menuColorPreview = new QLabel(g);
+        menuColorPreview->setFixedSize(36, 36);
+        auto* btn = makeColorBtn("Escolher Cor do Menu", g);
+        connect(btn, &QPushButton::clicked, this, [this]() {
+            QColor c = QColorDialog::getColor(settingsManager->getMenuColor(),
+                                               this, "Cor do Menu");
+            if (c.isValid()) {
                 settingsManager->setMenuColor(c);
+                menuColorPreview->setStyleSheet(
+                    QString("background:%1;border-radius:4px;border:2px solid #888;").arg(c.name()));
                 emit settingsChanged();
-            }));
+            }
+        });
+        gl->addWidget(menuColorPreview);
+        gl->addWidget(btn, 1);
         cLay->addWidget(g);
     }
 
     // ── Cor de Fundo do App ───────────────────────────────────────────────────
-    // FIX: esta cor afeta o fundo externo do app (o cinza escuro que aparece por baixo)
     {
-        QGroupBox* g = makeGroup("Cor de Fundo do App");
-        QLabel* hint = new QLabel("A cor que aparece atrás de todo o conteúdo.", g);
+        auto* g  = makeGroup("Cor de Fundo do App", content);
+        auto* gl = new QVBoxLayout(g);
+        auto* hint = new QLabel("Cor que aparece atrás de todo o conteúdo.", g);
         hint->setStyleSheet("color:#aaa;font-size:12px;");
-        QVBoxLayout* gl = new QVBoxLayout(g);
         gl->addWidget(hint);
-        gl->addLayout(makeColorRow(g, "Escolher Cor de Fundo",
-            bgColorPreview, settingsManager->getBgColor(),
-            [this](QColor c) {
+        auto* row = new QHBoxLayout();
+        bgColorPreview = new QLabel(g);
+        bgColorPreview->setFixedSize(36, 36);
+        auto* btn = makeColorBtn("Escolher Cor de Fundo", g);
+        connect(btn, &QPushButton::clicked, this, [this]() {
+            QColor c = QColorDialog::getColor(settingsManager->getBgColor(),
+                                               this, "Cor de Fundo");
+            if (c.isValid()) {
                 settingsManager->setBgColor(c);
+                bgColorPreview->setStyleSheet(
+                    QString("background:%1;border-radius:4px;border:2px solid #888;").arg(c.name()));
                 emit settingsChanged();
-            }));
+            }
+        });
+        row->addWidget(bgColorPreview);
+        row->addWidget(btn, 1);
+        gl->addLayout(row);
         cLay->addWidget(g);
     }
 
     // ── Cor de Janela ─────────────────────────────────────────────────────────
-    // NOVO: cor dos cards, grades e painéis internos
     {
-        QGroupBox* g = makeGroup("Cor de Janela");
-        QLabel* hint = new QLabel("A cor dos cards, grade de livros e painéis internos.", g);
+        auto* g  = makeGroup("Cor de Janela", content);
+        auto* gl = new QVBoxLayout(g);
+        auto* hint = new QLabel("Cor dos cards, grade de livros e painéis internos.", g);
         hint->setStyleSheet("color:#aaa;font-size:12px;");
-        QVBoxLayout* gl = new QVBoxLayout(g);
         gl->addWidget(hint);
-        gl->addLayout(makeColorRow(g, "Escolher Cor de Janela",
-            winColorPreview, settingsManager->getWindowColor(),
-            [this](QColor c) {
+        auto* row = new QHBoxLayout();
+        winColorPreview = new QLabel(g);
+        winColorPreview->setFixedSize(36, 36);
+        auto* btn = makeColorBtn("Escolher Cor de Janela", g);
+        connect(btn, &QPushButton::clicked, this, [this]() {
+            QColor c = QColorDialog::getColor(settingsManager->getWindowColor(),
+                                               this, "Cor de Janela");
+            if (c.isValid()) {
                 settingsManager->setWindowColor(c);
+                winColorPreview->setStyleSheet(
+                    QString("background:%1;border-radius:4px;border:2px solid #888;").arg(c.name()));
                 emit settingsChanged();
-            }));
+            }
+        });
+        row->addWidget(winColorPreview);
+        row->addWidget(btn, 1);
+        gl->addLayout(row);
         cLay->addWidget(g);
     }
 
     // ── Brilho ────────────────────────────────────────────────────────────────
     {
-        QGroupBox* g = makeGroup("Brilho da Tela");
-        QVBoxLayout* gl = new QVBoxLayout(g);
+        auto* g  = makeGroup("Brilho da Tela", content);
+        auto* gl = new QVBoxLayout(g);
         brightnessLabel = new QLabel("100%", g);
         brightnessLabel->setStyleSheet("color:white;font-size:13px;");
         brightnessSlider = new QSlider(Qt::Horizontal, g);
         brightnessSlider->setRange(20, 100);
-        brightnessSlider->setValue(100);
         brightnessSlider->setStyleSheet(
             "QSlider::groove:horizontal{background:#444;height:6px;border-radius:3px;}"
-            "QSlider::handle:horizontal{background:#4CAF50;width:22px;height:22px;margin:-8px 0;border-radius:11px;}"
+            "QSlider::handle:horizontal{background:#4CAF50;width:22px;height:22px;"
+            "margin:-8px 0;border-radius:11px;}"
             "QSlider::sub-page:horizontal{background:#1e6432;border-radius:3px;}");
         connect(brightnessSlider, &QSlider::valueChanged, this, [this](int v) {
             brightnessLabel->setText(QString("%1%").arg(v));
@@ -154,28 +229,29 @@ void SettingsScreen::setupUI()
     }
 
     // ── Temperatura de Cor (Âmbar) ────────────────────────────────────────────
-    // FIX: agora realmente aplica via ReaderScreen::setAmberIntensity → PageWidget::paintEvent
+    // FIX: âmbar agora age na TELA TODA via overlay na MainWindow
     {
-        QGroupBox* g = makeGroup("Temperatura de Cor — Filtro Âmbar");
-        QLabel* hint = new QLabel(
-            "Aplica um filtro laranja-quente durante a leitura. Funciona ao abrir um livro.", g);
+        auto* g  = makeGroup("Temperatura de Cor — Filtro Âmbar", content);
+        auto* gl = new QVBoxLayout(g);
+        auto* hint = new QLabel(
+            "Filtro laranja-quente sobre toda a tela (menus e leitor).", g);
         hint->setStyleSheet("color:#aaa;font-size:12px;");
         hint->setWordWrap(true);
-        QVBoxLayout* gl = new QVBoxLayout(g);
         gl->addWidget(hint);
         amberLabel = new QLabel("Desligado", g);
         amberLabel->setStyleSheet("color:#FFA040;font-size:13px;");
         amberSlider = new QSlider(Qt::Horizontal, g);
         amberSlider->setRange(0, 100);
-        amberSlider->setValue(0);
         amberSlider->setStyleSheet(
             "QSlider::groove:horizontal{background:#444;height:6px;border-radius:3px;}"
-            "QSlider::handle:horizontal{background:#FF9500;width:22px;height:22px;margin:-8px 0;border-radius:11px;}"
+            "QSlider::handle:horizontal{background:#FF9500;width:22px;height:22px;"
+            "margin:-8px 0;border-radius:11px;}"
             "QSlider::sub-page:horizontal{background:#FF6600;border-radius:3px;}");
         connect(amberSlider, &QSlider::valueChanged, this, [this](int v) {
-            amberLabel->setText(v == 0 ? "Desligado" : QString("Intensidade %1%").arg(v));
+            amberLabel->setText(v == 0 ? "Desligado"
+                                       : QString("Intensidade  %1%").arg(v));
             settingsManager->setAmberIntensity(v);
-            emit settingsChanged(); // MainWindow propaga para ReaderScreen
+            emit settingsChanged();
         });
         gl->addWidget(amberSlider);
         gl->addWidget(amberLabel);
@@ -184,70 +260,84 @@ void SettingsScreen::setupUI()
 
     // ── Aparência ─────────────────────────────────────────────────────────────
     {
-        QGroupBox* g = makeGroup("Aparência");
-        QVBoxLayout* gl = new QVBoxLayout(g);
-        nightModeCheck = new QCheckBox("🌙 Modo Noturno", g);
-        nightModeCheck->setStyleSheet("QCheckBox{color:white;font-size:14px;spacing:10px;}");
+        auto* g  = makeGroup("Aparência", content);
+        auto* gl = new QVBoxLayout(g);
+        nightModeCheck = new QCheckBox("🌙  Modo Noturno", g);
+        nightModeCheck->setStyleSheet(
+            "QCheckBox{color:white;font-size:14px;spacing:10px;}");
+        sepiaCheck = new QCheckBox("📜  Modo Sépia", g);
+        sepiaCheck->setStyleSheet(nightModeCheck->styleSheet());
         connect(nightModeCheck, &QCheckBox::toggled, this, [this](bool on) {
-            settingsManager->setNightMode(on);
-            emit settingsChanged();
+            settingsManager->setNightMode(on); emit settingsChanged();
         });
-        sepiaCheck = new QCheckBox("📜 Modo Sépia", g);
-        sepiaCheck->setStyleSheet("QCheckBox{color:white;font-size:14px;spacing:10px;}");
         connect(sepiaCheck, &QCheckBox::toggled, this, [this](bool on) {
-            settingsManager->setSepiaEnabled(on);
-            emit settingsChanged();
+            settingsManager->setSepiaEnabled(on); emit settingsChanged();
         });
         gl->addWidget(nightModeCheck);
         gl->addWidget(sepiaCheck);
         cLay->addWidget(g);
     }
 
-    // ── Orientação ────────────────────────────────────────────────────────────
+    // ── Orientação do Ecrã ────────────────────────────────────────────────────
+    // FIX: usa QProcess para xrandr/wlr-randr/fbcon com detecção automática de output
     {
-        QGroupBox* g = makeGroup("Orientação do Ecrã");
-        QHBoxLayout* gl = new QHBoxLayout(g);
-        auto makeOrientBtn = [&](const QString& label, const QString& arg) {
-            QPushButton* b = new QPushButton(label, g);
-            b->setStyleSheet(
-                "QPushButton{background:#444;color:white;padding:10px;border-radius:6px;}"
-                "QPushButton:pressed{background:#1e6432;}");
-            connect(b, &QPushButton::clicked, this, [arg]() {
-                QString cmd = QString(
-                    "xrandr --output HDMI-1 --rotate %1 2>/dev/null || "
-                    "xrandr --output DSI-1  --rotate %1 2>/dev/null || "
-                    "xrandr --output LVDS-1 --rotate %1 2>/dev/null").arg(arg);
-                system(cmd.toStdString().c_str());
-            });
-            return b;
+        auto* g  = makeGroup("Orientação do Ecrã", content);
+        auto* hint = new QLabel(
+            "Aplica rotação via xrandr (X11), wlr-randr (Wayland) ou\n"
+            "fbcon (framebuffer). Requer que o servidor gráfico suporte rotação.", g);
+        hint->setStyleSheet("color:#aaa;font-size:12px;");
+        hint->setWordWrap(true);
+        auto* gl = new QVBoxLayout(g);
+        gl->addWidget(hint);
+
+        auto* row = new QHBoxLayout();
+        struct OrientDef { QString label, xrandr, wlr; };
+        QList<OrientDef> orients = {
+            {"↕ Retrato",   "normal",   "normal"},
+            {"↔ Paisagem",  "left",     "90"},
+            {"↕ Invertido", "inverted", "180"},
+            {"↔ Pais. 2",  "right",    "270"},
         };
-        gl->addWidget(makeOrientBtn("↕ Retrato",  "normal"));
-        gl->addWidget(makeOrientBtn("↔ Paisagem", "left"));
-        gl->addWidget(makeOrientBtn("↕ Inv.",     "inverted"));
-        gl->addWidget(makeOrientBtn("↔ Pais.2",  "right"));
+        for (const auto& o : orients) {
+            auto* btn = new QPushButton(o.label, g);
+            btn->setStyleSheet(
+                "QPushButton{background:#444;color:white;padding:10px 6px;"
+                "border-radius:6px;font-size:12px;}"
+                "QPushButton:pressed{background:#1e6432;}");
+            QString xr = o.xrandr, wl = o.wlr;
+            connect(btn, &QPushButton::clicked, this, [xr, wl]() {
+                applyRotation(xr, wl);
+            });
+            row->addWidget(btn);
+        }
+        gl->addLayout(row);
         cLay->addWidget(g);
     }
 
-    // ── Presets ───────────────────────────────────────────────────────────────
+    // ── Presets de aparência ──────────────────────────────────────────────────
     {
-        QGroupBox* g = makeGroup("Presets de Aparência");
-        QVBoxLayout* gl = new QVBoxLayout(g);
+        auto* g  = makeGroup("Presets de Aparência", content);
+        auto* gl = new QVBoxLayout(g);
 
-        struct Preset { QString label, menu, bg, win; bool night, sepia; int amber; };
+        struct Preset {
+            QString label, menu, bg, win;
+            bool night, sepia;
+            int amber;
+        };
         QList<Preset> presets = {
             {"🌿 Floresta",    "#1e6432", "#1a1a1a", "#2b2b2b", false, false,  0},
             {"🌊 Oceano",      "#1a4a7a", "#0e1a2a", "#1e2a3a", false, false,  0},
             {"🌙 Noturno",     "#111111", "#080808", "#151515", true,  false,  0},
-            {"📜 Sépia",       "#7a5c2e", "#1a0e00", "#2a1e10", false, true,  25},
-            {"🕯️  Vela",        "#8B4513", "#0a0500", "#1a0e00", true,  false, 60},
+            {"📜 Sépia",       "#7a5c2e", "#1a0e00", "#2a1e10", false, true,  30},
+            {"🕯 Vela",        "#8B4513", "#0a0500", "#1a0e00", true,  false, 60},
             {"🖤 Preto Total", "#000000", "#000000", "#0a0a0a", true,  false,  0},
         };
 
         QHBoxLayout* row = nullptr;
         for (int i = 0; i < presets.size(); i++) {
             if (i % 2 == 0) { row = new QHBoxLayout(); gl->addLayout(row); }
-            const Preset& p = presets[i];
-            QPushButton* btn = new QPushButton(p.label, g);
+            const auto& p = presets[i];
+            auto* btn = new QPushButton(p.label, g);
             btn->setStyleSheet(
                 QString("QPushButton{background:%1;color:white;padding:10px;"
                         "border-radius:6px;font-size:12px;border:2px solid #555;}"
@@ -270,10 +360,10 @@ void SettingsScreen::setupUI()
     }
 
     // ── Restaurar padrões ─────────────────────────────────────────────────────
-    QPushButton* resetBtn = new QPushButton("🔄 Restaurar Padrões", content);
+    auto* resetBtn = new QPushButton("🔄  Restaurar Padrões", content);
     resetBtn->setStyleSheet(
-        "QPushButton{background:#8B0000;color:white;padding:12px;border-radius:6px;"
-        "font-size:14px;font-weight:bold;}"
+        "QPushButton{background:#8B0000;color:white;padding:12px;"
+        "border-radius:6px;font-size:14px;font-weight:bold;}"
         "QPushButton:pressed{background:#A00000;}");
     connect(resetBtn, &QPushButton::clicked, this, [this]() {
         settingsManager->resetToDefaults();
@@ -287,22 +377,30 @@ void SettingsScreen::setupUI()
     mainLay->addWidget(scroll, 1);
 }
 
+// ── Carrega valores salvos nos widgets ────────────────────────────────────────
+
 void SettingsScreen::loadCurrentSettings()
 {
-    auto setPreview = [](QLabel* lbl, const QColor& c) {
+    auto preview = [](QLabel* lbl, const QColor& c) {
         if (lbl) lbl->setStyleSheet(
-            QString("background:%1;border-radius:4px;border:2px solid #888;").arg(c.name()));
+            QString("background:%1;border-radius:4px;border:2px solid #888;")
+            .arg(c.name()));
     };
-    setPreview(menuColorPreview, settingsManager->getMenuColor());
-    setPreview(bgColorPreview,   settingsManager->getBgColor());
-    setPreview(winColorPreview,  settingsManager->getWindowColor());
+    preview(menuColorPreview, settingsManager->getMenuColor());
+    preview(bgColorPreview,   settingsManager->getBgColor());
+    preview(winColorPreview,  settingsManager->getWindowColor());
+
     nightModeCheck->setChecked(settingsManager->getNightMode());
     sepiaCheck->setChecked(settingsManager->getSepiaEnabled());
-    brightnessSlider->setValue(settingsManager->getBrightness());
-    amberSlider->setValue(settingsManager->getAmberIntensity());
+
+    int br = settingsManager->getBrightness();
+    brightnessSlider->setValue(br);
+    brightnessLabel->setText(QString("%1%").arg(br));
+
     int am = settingsManager->getAmberIntensity();
-    amberLabel->setText(am == 0 ? "Desligado" : QString("Intensidade %1%").arg(am));
-    brightnessLabel->setText(QString("%1%").arg(settingsManager->getBrightness()));
+    amberSlider->setValue(am);
+    amberLabel->setText(am == 0 ? "Desligado"
+                                : QString("Intensidade  %1%").arg(am));
 }
 
 void SettingsScreen::setMenuColor(const QColor& color)
