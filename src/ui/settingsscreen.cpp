@@ -3,9 +3,8 @@
 
 #include <QHBoxLayout>
 #include <QColorDialog>
-#include <QFrame>
-#include <QFont>
 #include <QGroupBox>
+#include <cstdlib>
 #include <QScrollArea>
 
 SettingsScreen::SettingsScreen(QWidget* parent)
@@ -20,233 +19,268 @@ SettingsScreen::~SettingsScreen() = default;
 
 void SettingsScreen::setupUI()
 {
-    mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
+    QVBoxLayout* mainLay = new QVBoxLayout(this);
+    mainLay->setContentsMargins(0, 0, 0, 0);
+    mainLay->setSpacing(0);
 
     // ── Topbar ───────────────────────────────────────────────────────────────
     topBar = new QWidget(this);
     topBar->setFixedHeight(50);
-    topBar->setStyleSheet("background-color: #1e6432;");
+    topBar->setStyleSheet("background-color:#1e6432;");
+    QHBoxLayout* topLay = new QHBoxLayout(topBar);
+    topLay->setContentsMargins(10, 5, 10, 5);
 
-    QHBoxLayout* topLayout = new QHBoxLayout(topBar);
-    topLayout->setContentsMargins(10, 5, 10, 5);
-
-    menuButton = new QPushButton(QString::fromUtf8("☰"), topBar);
+    menuButton = new QPushButton("☰", topBar);
     menuButton->setFixedSize(40, 40);
     menuButton->setStyleSheet(
-        "QPushButton { background: transparent; color: white; font-size: 24px; border: none; }"
-        "QPushButton:pressed { background-color: rgba(255,255,255,0.2); border-radius: 20px; }"
-    );
+        "QPushButton{background:transparent;color:white;font-size:24px;border:none;}"
+        "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
     connect(menuButton, &QPushButton::clicked, this, &SettingsScreen::menuClicked);
 
     titleLabel = new QLabel("Configurações", topBar);
-    titleLabel->setStyleSheet("color: white; font-size: 18px; font-weight: bold;");
-    topLayout->addWidget(menuButton);
-    topLayout->addWidget(titleLabel, 1);
-    mainLayout->addWidget(topBar);
+    titleLabel->setStyleSheet("color:white;font-size:18px;font-weight:bold;");
+    topLay->addWidget(menuButton);
+    topLay->addWidget(titleLabel, 1);
+    mainLay->addWidget(topBar);
 
-    // ── Área de scroll para o conteúdo ───────────────────────────────────────
-    QScrollArea* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setStyleSheet("QScrollArea { border: none; background-color: #2b2b2b; }");
+    // ── Scroll ───────────────────────────────────────────────────────────────
+    QScrollArea* scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setStyleSheet("QScrollArea{border:none;background:#2b2b2b;}");
 
     QWidget* content = new QWidget();
-    content->setStyleSheet("background-color: #2b2b2b;");
-    QVBoxLayout* contentLayout = new QVBoxLayout(content);
-    contentLayout->setContentsMargins(20, 20, 20, 20);
-    contentLayout->setSpacing(20);
+    content->setStyleSheet("background:#2b2b2b;");
+    QVBoxLayout* cLay = new QVBoxLayout(content);
+    cLay->setContentsMargins(16, 16, 16, 16);
+    cLay->setSpacing(16);
 
-    // ── Grupo: Cor do menu ────────────────────────────────────────────────────
-    QGroupBox* colorGroup = new QGroupBox("Cor do Menu", content);
-    colorGroup->setStyleSheet(
-        "QGroupBox { color: white; font-size: 14px; font-weight: bold; "
-        "border: 1px solid #555; border-radius: 8px; margin-top: 10px; padding-top: 15px; }"
-        "QGroupBox::title { subcontrol-origin: margin; left: 15px; padding: 0 5px; }"
-    );
-    QHBoxLayout* colorLayout = new QHBoxLayout(colorGroup);
+    auto makeGroup = [](const QString& title, QWidget* parent) {
+        QGroupBox* g = new QGroupBox(title, parent);
+        g->setStyleSheet(
+            "QGroupBox{color:white;font-size:14px;font-weight:bold;"
+            "border:1px solid #555;border-radius:8px;margin-top:10px;padding-top:15px;}"
+            "QGroupBox::title{subcontrol-origin:margin;left:15px;padding:0 5px;}");
+        return g;
+    };
 
+    // ── Grupo: Cor do Menu ────────────────────────────────────────────────────
+    QGroupBox* colorGroup = makeGroup("Cor do Menu", content);
+    QHBoxLayout* colorLay = new QHBoxLayout(colorGroup);
     currentColorLabel = new QLabel(colorGroup);
     currentColorLabel->setFixedSize(40, 40);
-    currentColorLabel->setStyleSheet("background-color: #1e6432; border-radius: 4px; border: 2px solid #888;");
-
+    currentColorLabel->setStyleSheet("background:#1e6432;border-radius:4px;border:2px solid #888;");
     colorButton = new QPushButton("Escolher Cor", colorGroup);
-    colorButton->setStyleSheet(
-        "QPushButton { background-color: #444; color: white; padding: 10px 20px; "
-        "border-radius: 6px; font-size: 14px; }"
-        "QPushButton:pressed { background-color: #555; }"
-    );
-    // FIX: ao selecionar cor, emite settingsChanged → MainWindow aplica em toda UI
+    colorButton->setStyleSheet("QPushButton{background:#444;color:white;padding:10px 20px;border-radius:6px;font-size:14px;}"
+                                "QPushButton:pressed{background:#555;}");
     connect(colorButton, &QPushButton::clicked, this, [this]() {
-        QColor color = QColorDialog::getColor(settingsManager->getMenuColor(), this, "Escolher Cor do Menu");
-        if (color.isValid()) onColorSelected(color);
+        QColor c = QColorDialog::getColor(settingsManager->getMenuColor(), this, "Cor do Menu");
+        if (c.isValid()) onColorSelected(c);
     });
+    colorLay->addWidget(currentColorLabel);
+    colorLay->addWidget(colorButton, 1);
+    cLay->addWidget(colorGroup);
 
-    colorLayout->addWidget(currentColorLabel);
-    colorLayout->addWidget(colorButton, 1);
-    contentLayout->addWidget(colorGroup);
-
-    // ── Grupo: Cor de fundo ───────────────────────────────────────────────────
-    QGroupBox* bgGroup = new QGroupBox("Cor de Fundo", content);
-    bgGroup->setStyleSheet(colorGroup->styleSheet());
-    QHBoxLayout* bgLayout = new QHBoxLayout(bgGroup);
-
-    currentBgColorLabel = new QLabel(bgGroup);
-    currentBgColorLabel->setFixedSize(40, 40);
-    currentBgColorLabel->setStyleSheet("background-color: #2b2b2b; border-radius: 4px; border: 2px solid #888;");
-
+    // ── Grupo: Cor de Fundo ───────────────────────────────────────────────────
+    QGroupBox* bgGroup = makeGroup("Cor de Fundo", content);
+    QHBoxLayout* bgLay = new QHBoxLayout(bgGroup);
+    currentBgLabel = new QLabel(bgGroup);
+    currentBgLabel->setFixedSize(40, 40);
+    currentBgLabel->setStyleSheet("background:#2b2b2b;border-radius:4px;border:2px solid #888;");
     bgColorButton = new QPushButton("Escolher Fundo", bgGroup);
     bgColorButton->setStyleSheet(colorButton->styleSheet());
     connect(bgColorButton, &QPushButton::clicked, this, [this]() {
-        QColor color = QColorDialog::getColor(settingsManager->getBgColor(), this, "Escolher Cor de Fundo");
-        if (color.isValid()) {
-            settingsManager->setBgColor(color);
-            currentBgColorLabel->setStyleSheet(
-                QString("background-color: %1; border-radius: 4px; border: 2px solid #888;").arg(color.name())
-            );
-            emit settingsChanged();
+        QColor c = QColorDialog::getColor(settingsManager->getBgColor(), this, "Cor de Fundo");
+        if (c.isValid()) {
+            settingsManager->setBgColor(c);
+            currentBgLabel->setStyleSheet(
+                QString("background:%1;border-radius:4px;border:2px solid #888;").arg(c.name()));
+            emit settingsChanged(); // MainWindow aplica no fundo real
         }
     });
+    bgLay->addWidget(currentBgLabel);
+    bgLay->addWidget(bgColorButton, 1);
+    cLay->addWidget(bgGroup);
 
-    bgLayout->addWidget(currentBgColorLabel);
-    bgLayout->addWidget(bgColorButton, 1);
-    contentLayout->addWidget(bgGroup);
+    // ── Grupo: Brilho ─────────────────────────────────────────────────────────
+    QGroupBox* brightGroup = makeGroup("Brilho da Tela", content);
+    QVBoxLayout* brightLay = new QVBoxLayout(brightGroup);
+    QLabel* brightVal = new QLabel("100%", brightGroup);
+    brightVal->setStyleSheet("color:white;font-size:13px;");
+    brightnessSlider = new QSlider(Qt::Horizontal, brightGroup);
+    brightnessSlider->setRange(20, 100);
+    brightnessSlider->setValue(100);
+    brightnessSlider->setStyleSheet(
+        "QSlider::groove:horizontal{background:#444;height:6px;border-radius:3px;}"
+        "QSlider::handle:horizontal{background:#4CAF50;width:22px;height:22px;"
+        "margin:-8px 0;border-radius:11px;}"
+        "QSlider::sub-page:horizontal{background:#1e6432;border-radius:3px;}");
+    connect(brightnessSlider, &QSlider::valueChanged, this, [this, brightVal](int v) {
+        brightVal->setText(QString("%1%").arg(v));
+        settingsManager->setBrightness(v);
+        emit settingsChanged();
+    });
+    brightLay->addWidget(brightnessSlider);
+    brightLay->addWidget(brightVal);
+    cLay->addWidget(brightGroup);
 
-    // ── Grupo: Aparência / Modo noturno ──────────────────────────────────────
-    QGroupBox* nightGroup = new QGroupBox("Aparência", content);
-    nightGroup->setStyleSheet(colorGroup->styleSheet());
-    QVBoxLayout* nightLayout = new QVBoxLayout(nightGroup);
+    // ── Grupo: Temperatura de Cor (âmbar) ────────────────────────────────────
+    QGroupBox* amberGroup = makeGroup("Temperatura de Cor (Filtro Âmbar)", content);
+    QVBoxLayout* amberLay = new QVBoxLayout(amberGroup);
+    QLabel* amberVal = new QLabel("Desligado", amberGroup);
+    amberVal->setStyleSheet("color:#FFA040;font-size:13px;");
+    amberSlider = new QSlider(Qt::Horizontal, amberGroup);
+    amberSlider->setRange(0, 100);
+    amberSlider->setValue(0);
+    amberSlider->setStyleSheet(
+        "QSlider::groove:horizontal{background:#444;height:6px;border-radius:3px;}"
+        "QSlider::handle:horizontal{background:#FF9500;width:22px;height:22px;"
+        "margin:-8px 0;border-radius:11px;}"
+        "QSlider::sub-page:horizontal{background:#FF6600;border-radius:3px;}");
+    connect(amberSlider, &QSlider::valueChanged, this, [this, amberVal](int v) {
+        amberVal->setText(v == 0 ? "Desligado" : QString("Intensidade %1%").arg(v));
+        settingsManager->setAmberIntensity(v);
+        emit settingsChanged();
+    });
+    amberLay->addWidget(amberSlider);
+    amberLay->addWidget(amberVal);
+    cLay->addWidget(amberGroup);
 
-    nightModeCheck = new QCheckBox("Modo Noturno", nightGroup);
-    nightModeCheck->setStyleSheet("QCheckBox { color: white; font-size: 14px; spacing: 10px; }");
-    // FIX: modo noturno agora emite settingsChanged → MainWindow aplica tema real
+    // ── Grupo: Aparência ──────────────────────────────────────────────────────
+    QGroupBox* appearGroup = makeGroup("Aparência", content);
+    QVBoxLayout* appearLay = new QVBoxLayout(appearGroup);
+
+    nightModeCheck = new QCheckBox("🌙 Modo Noturno (fundo escuro)", appearGroup);
+    nightModeCheck->setStyleSheet("QCheckBox{color:white;font-size:14px;spacing:10px;}");
     connect(nightModeCheck, &QCheckBox::toggled, this, &SettingsScreen::onNightModeToggled);
+    appearLay->addWidget(nightModeCheck);
 
-    nightLayout->addWidget(nightModeCheck);
-    contentLayout->addWidget(nightGroup);
+    sepiaCheck = new QCheckBox("📜 Modo Sépia (sobreposição de tom)", appearGroup);
+    sepiaCheck->setStyleSheet("QCheckBox{color:white;font-size:14px;spacing:10px;}");
+    connect(sepiaCheck, &QCheckBox::toggled, this, [this](bool on) {
+        settingsManager->setSepiaEnabled(on);
+        emit settingsChanged();
+    });
+    appearLay->addWidget(sepiaCheck);
 
-    // ── Grupo: Presets de aparência ───────────────────────────────────────────
-    QGroupBox* presetGroup = new QGroupBox("Presets de Aparência", content);
-    presetGroup->setStyleSheet(colorGroup->styleSheet());
-    QHBoxLayout* presetLayout = new QHBoxLayout(presetGroup);
-    presetLayout->setSpacing(10);
+    cLay->addWidget(appearGroup);
 
-    // Preset 1: Verde floresta (padrão)
-    applyPresetButton(new QPushButton("🌿 Floresta", presetGroup),
-                      "🌿 Floresta", "#1e6432", "#2b2b2b", false);
-    // Preset 2: Azul oceano
-    applyPresetButton(new QPushButton("🌊 Oceano", presetGroup),
-                      "🌊 Oceano", "#1a4a7a", "#1e2a3a", false);
-    // Preset 3: Noturno puro
-    applyPresetButton(new QPushButton("🌙 Noturno", presetGroup),
-                      "🌙 Noturno", "#111111", "#0d0d0d", true);
-    // Preset 4: Sépia
-    applyPresetButton(new QPushButton("📜 Sépia", presetGroup),
-                      "📜 Sépia", "#7a5c2e", "#3a2e1e", false);
+    // ── Grupo: Orientação do Ecrã ─────────────────────────────────────────────
+    // No RPi com X11 usamos xrandr. Em Wayland usar wlr-randr.
+    QGroupBox* orientGroup = makeGroup("Orientação do Ecrã", content);
+    QHBoxLayout* orientLay = new QHBoxLayout(orientGroup);
+    auto makeOrientBtn = [&](const QString& label, const QString& xrandrArg) {
+        QPushButton* b = new QPushButton(label, orientGroup);
+        b->setStyleSheet("QPushButton{background:#444;color:white;padding:10px;border-radius:6px;font-size:12px;}"
+                          "QPushButton:pressed{background:#1e6432;}");
+        connect(b, &QPushButton::clicked, this, [xrandrArg]() {
+            // Tenta as saídas mais comuns do RPi automaticamente
+            QString cmd = QString(
+                "xrandr --output HDMI-1 --rotate %1 2>/dev/null || "
+                "xrandr --output DSI-1  --rotate %1 2>/dev/null || "
+                "xrandr --output LVDS-1 --rotate %1 2>/dev/null"
+            ).arg(xrandrArg);
+            system(cmd.toStdString().c_str());
+        });
+        return b;
+    };
+    orientLay->addWidget(makeOrientBtn("↕ Retrato",   "normal"));
+    orientLay->addWidget(makeOrientBtn("↔ Paisagem",  "left"));
+    orientLay->addWidget(makeOrientBtn("↕ Inv.",      "inverted"));
+    orientLay->addWidget(makeOrientBtn("↔ Pais.2",   "right"));
+    cLay->addWidget(orientGroup);
 
-    for (int i = 0; i < presetLayout->count(); i++) {
-        if (auto* btn = qobject_cast<QPushButton*>(presetLayout->itemAt(i)->widget())) {
-            presetLayout->addWidget(btn);
-        }
-    }
+    // ── Grupo: Presets ────────────────────────────────────────────────────────
+    QGroupBox* presetGroup = makeGroup("Presets de Aparência", content);
+    QVBoxLayout* presetLay = new QVBoxLayout(presetGroup);
 
-    // Re-adiciona os botões corretamente
-    QList<QPushButton*> presetBtns;
-    struct Preset { QString label, menu, bg; bool night; };
+    struct Preset {
+        QString label, menu, bg;
+        bool night, sepia;
+        int amber;
+    };
     QList<Preset> presets = {
-        {"🌿 Floresta", "#1e6432", "#2b2b2b", false},
-        {"🌊 Oceano",   "#1a4a7a", "#1e2a3a", false},
-        {"🌙 Noturno",  "#111111", "#0d0d0d", true },
-        {"📜 Sépia",    "#7a5c2e", "#3a2e1e", false},
+        {"🌿 Floresta (padrão)", "#1e6432", "#2b2b2b", false, false, 0},
+        {"🌊 Oceano",            "#1a4a7a", "#1e2a3a", false, false, 0},
+        {"🌙 Noturno Escuro",    "#111111", "#0a0a0a", true,  false, 0},
+        {"📜 Sépia Clássico",   "#7a5c2e", "#3a2e1e", false, true,  20},
+        {"🕯️  Luz de Vela",      "#8B4513", "#1a0e00", true,  false, 60},
+        {"🌸 Rosa Suave",        "#8B3a62", "#2a1a22", false, false, 0},
+        {"🖤 Preto Total",       "#000000", "#000000", true,  false, 0},
+        {"☀️  Dia Ensolarado",   "#2196F3", "#F5F5F5", false, false, 0},
     };
 
-    QHBoxLayout* presetRowLayout = new QHBoxLayout();
-    presetRowLayout->setSpacing(8);
-    for (const Preset& p : presets) {
+    // Grid 2 colunas de presets
+    QHBoxLayout* presetRow = nullptr;
+    for (int i = 0; i < presets.size(); i++) {
+        if (i % 2 == 0) {
+            presetRow = new QHBoxLayout();
+            presetRow->setSpacing(8);
+            presetLay->addLayout(presetRow);
+        }
+        const Preset& p = presets[i];
         QPushButton* btn = new QPushButton(p.label, presetGroup);
         btn->setStyleSheet(
-            QString("QPushButton { background-color: %1; color: white; padding: 8px; "
-                    "border-radius: 6px; font-size: 12px; border: 2px solid #666; }"
-                    "QPushButton:pressed { border-color: white; }").arg(p.menu)
-        );
-        QString menuC = p.menu, bgC = p.bg;
-        bool night = p.night;
-        connect(btn, &QPushButton::clicked, this, [this, menuC, bgC, night]() {
-            onPresetSelected(menuC, bgC, night);
+            QString("QPushButton{background:%1;color:white;padding:10px;"
+                    "border-radius:6px;font-size:12px;border:2px solid #555;}"
+                    "QPushButton:pressed{border-color:white;}").arg(p.menu));
+        QString mc=p.menu, bc=p.bg; bool nt=p.night, sp=p.sepia; int am=p.amber;
+        connect(btn, &QPushButton::clicked, this, [this, mc, bc, nt, sp, am]() {
+            settingsManager->setMenuColor(QColor(mc));
+            settingsManager->setBgColor(QColor(bc));
+            settingsManager->setNightMode(nt);
+            settingsManager->setSepiaEnabled(sp);
+            settingsManager->setAmberIntensity(am);
+            loadCurrentSettings();
+            emit settingsChanged();
         });
-        presetRowLayout->addWidget(btn);
+        if (presetRow) presetRow->addWidget(btn);
     }
 
-    QVBoxLayout* presetVLayout = new QVBoxLayout(presetGroup);
-    presetVLayout->addLayout(presetRowLayout);
-    contentLayout->addWidget(presetGroup);
+    cLay->addWidget(presetGroup);
 
     // ── Restaurar padrões ─────────────────────────────────────────────────────
-    resetButton = new QPushButton("Restaurar Padrões", content);
+    resetButton = new QPushButton("🔄 Restaurar Padrões", content);
     resetButton->setStyleSheet(
-        "QPushButton { background-color: #8B0000; color: white; padding: 12px 20px; "
-        "border-radius: 6px; font-size: 14px; font-weight: bold; }"
-        "QPushButton:pressed { background-color: #A00000; }"
-    );
+        "QPushButton{background:#8B0000;color:white;padding:12px;border-radius:6px;font-size:14px;font-weight:bold;}"
+        "QPushButton:pressed{background:#A00000;}");
     connect(resetButton, &QPushButton::clicked, this, &SettingsScreen::onResetDefaults);
-    contentLayout->addWidget(resetButton);
+    cLay->addWidget(resetButton);
 
-    contentLayout->addStretch();
-    scrollArea->setWidget(content);
-    mainLayout->addWidget(scrollArea, 1);
+    cLay->addStretch();
+    scroll->setWidget(content);
+    mainLay->addWidget(scroll, 1);
 }
-
-void SettingsScreen::applyPresetButton(QPushButton*, const QString&,
-                                        const QString&, const QString&, bool) {}
 
 void SettingsScreen::loadCurrentSettings()
 {
-    QColor menuColor = settingsManager->getMenuColor();
-    QColor bgColor   = settingsManager->getBgColor();
-
+    QColor mc = settingsManager->getMenuColor();
+    QColor bc = settingsManager->getBgColor();
     currentColorLabel->setStyleSheet(
-        QString("background-color: %1; border-radius: 4px; border: 2px solid #888;").arg(menuColor.name())
-    );
-    currentBgColorLabel->setStyleSheet(
-        QString("background-color: %1; border-radius: 4px; border: 2px solid #888;").arg(bgColor.name())
-    );
+        QString("background:%1;border-radius:4px;border:2px solid #888;").arg(mc.name()));
+    currentBgLabel->setStyleSheet(
+        QString("background:%1;border-radius:4px;border:2px solid #888;").arg(bc.name()));
     nightModeCheck->setChecked(settingsManager->getNightMode());
+    sepiaCheck->setChecked(settingsManager->getSepiaEnabled());
+    brightnessSlider->setValue(settingsManager->getBrightness());
+    amberSlider->setValue(settingsManager->getAmberIntensity());
 }
 
 void SettingsScreen::setMenuColor(const QColor& color)
 {
-    topBar->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+    topBar->setStyleSheet(QString("background-color:%1;").arg(color.name()));
 }
 
-// FIX: onColorSelected salva E emite settingsChanged para MainWindow aplicar em toda UI
 void SettingsScreen::onColorSelected(const QColor& color)
 {
     settingsManager->setMenuColor(color);
     currentColorLabel->setStyleSheet(
-        QString("background-color: %1; border-radius: 4px; border: 2px solid #888;").arg(color.name())
-    );
-    emit settingsChanged();  // ← MainWindow::onSettingsChanged → applyMenuColor em todos
-}
-
-// FIX: modo noturno emite settingsChanged
-void SettingsScreen::onNightModeToggled(bool enabled)
-{
-    settingsManager->setNightMode(enabled);
+        QString("background:%1;border-radius:4px;border:2px solid #888;").arg(color.name()));
     emit settingsChanged();
 }
 
-void SettingsScreen::onPresetSelected(const QString& menuColor, const QString& bgColor, bool nightMode)
+void SettingsScreen::onNightModeToggled(bool enabled)
 {
-    settingsManager->setMenuColor(QColor(menuColor));
-    settingsManager->setBgColor(QColor(bgColor));
-    settingsManager->setNightMode(nightMode);
-    nightModeCheck->setChecked(nightMode);
-    currentColorLabel->setStyleSheet(
-        QString("background-color: %1; border-radius: 4px; border: 2px solid #888;").arg(menuColor)
-    );
-    currentBgColorLabel->setStyleSheet(
-        QString("background-color: %1; border-radius: 4px; border: 2px solid #888;").arg(bgColor)
-    );
+    settingsManager->setNightMode(enabled);
     emit settingsChanged();
 }
 

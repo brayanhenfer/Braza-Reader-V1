@@ -150,6 +150,11 @@ set(UI_SOURCES
     src/ui/aboutscreen.cpp
     src/ui/sidebarmenu.h
     src/ui/sidebarmenu.cpp
+    src/ui/termsscreen.h
+    src/ui/termsscreen.cpp
+    src/ui/collectionscreen.h
+    src/ui/collectionscreen.cpp
+
 )
 
 # ==============================================================================
@@ -176,6 +181,10 @@ set(STORAGE_SOURCES
     src/storage/favoritemanager.cpp
     src/storage/settingsmanager.h
     src/storage/settingsmanager.cpp
+    src/storage/collectionmanager.h
+    src/storage/collectionmanager.cpp
+    src/storage/annotationmanager.h
+    src/storage/annotationmanager.cpp
 )
 
 # ==============================================================================

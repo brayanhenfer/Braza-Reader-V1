@@ -5,6 +5,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QCheckBox>
+#include <QSlider>
 #include <QColor>
 #include <memory>
 
@@ -28,25 +29,27 @@ private slots:
     void onColorSelected(const QColor& color);
     void onNightModeToggled(bool enabled);
     void onResetDefaults();
-    void onPresetSelected(const QString& menuColor, const QString& bgColor, bool nightMode);
 
 private:
     void setupUI();
     void loadCurrentSettings();
-    void applyPresetButton(QPushButton* btn, const QString& label,
-                           const QString& menuColor, const QString& bgColor, bool nightMode);
 
-    QVBoxLayout*  mainLayout;
-    QWidget*      topBar;
-    QPushButton*  menuButton;
-    QLabel*       titleLabel;
+    QWidget*     topBar;
+    QPushButton* menuButton;
+    QLabel*      titleLabel;
 
-    QPushButton*  colorButton;
-    QPushButton*  bgColorButton;
-    QCheckBox*    nightModeCheck;
-    QPushButton*  resetButton;
-    QLabel*       currentColorLabel;
-    QLabel*       currentBgColorLabel;
+    QLabel*      currentColorLabel;
+    QPushButton* colorButton;
+    QLabel*      currentBgLabel;
+    QPushButton* bgColorButton;
+
+    QSlider*     brightnessSlider;
+    QSlider*     amberSlider;
+
+    QCheckBox*   nightModeCheck;
+    QCheckBox*   sepiaCheck;
+
+    QPushButton* resetButton;
 
     std::unique_ptr<SettingsManager> settingsManager;
 };
