@@ -1,80 +1,60 @@
 #include "termsscreen.h"
+#include "topbar_helper.h"
+#include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QTextEdit>
+#include <QScrollArea>
+#include <QTextBrowser>
 
-TermsScreen::TermsScreen(QWidget* parent)
-    : QWidget(parent)
-{
-    setupUI();
-}
-
+TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) { setupUI(); }
 TermsScreen::~TermsScreen() = default;
 
 void TermsScreen::setupUI()
 {
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
+    QVBoxLayout* lay = new QVBoxLayout(this);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setSpacing(0);
 
-    // ── Topbar ───────────────────────────────────────────────────────────────
-    topBar = new QWidget(this);
-    topBar->setFixedHeight(50);
-    topBar->setStyleSheet("background-color: #1e6432;");
-
-    QHBoxLayout* topLayout = new QHBoxLayout(topBar);
-    topLayout->setContentsMargins(10, 5, 10, 5);
-
-    backButton = new QPushButton(QString::fromUtf8("←"), topBar);
+    backButton = new QPushButton("←");
     backButton->setFixedSize(40, 40);
     backButton->setStyleSheet(
-        "QPushButton { background: transparent; color: white; font-size: 22px; border: none; }"
-        "QPushButton:pressed { background-color: rgba(255,255,255,0.2); border-radius: 20px; }"
-    );
+        "QPushButton{background:transparent;color:white;font-size:22px;border:none;}"
+        "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
+    // FIX: backClicked → MainWindow::onNavigateToLibrary (não onNavigateToAbout)
     connect(backButton, &QPushButton::clicked, this, &TermsScreen::backClicked);
 
-    titleLabel = new QLabel("Termos de Uso", topBar);
-    titleLabel->setStyleSheet("color: white; font-size: 18px; font-weight: bold;");
+    topBar = TopBarHelper::create(this, backButton);
+    lay->addWidget(topBar);
 
-    topLayout->addWidget(backButton);
-    topLayout->addWidget(titleLabel, 1);
-    mainLayout->addWidget(topBar);
-
-    // ── Conteúdo ─────────────────────────────────────────────────────────────
-    QTextEdit* textEdit = new QTextEdit(this);
-    textEdit->setReadOnly(true);
-    textEdit->setStyleSheet(
-        "QTextEdit { background-color: #2b2b2b; color: #ddd; "
-        "font-size: 14px; border: none; padding: 20px; }"
-    );
-    textEdit->setHtml(R"(
-        <h2 style='color:#aee8b0;'>Termos de Uso — BrazaReader</h2>
-        <p><b>1. Uso pessoal</b><br>
-        O BrazaReader é um software de uso pessoal e educacional. É proibida a redistribuição
-        do aplicativo sem autorização expressa do desenvolvedor.</p>
-
-        <p><b>2. Conteúdo</b><br>
-        O usuário é responsável pelos arquivos PDF carregados no aplicativo.
-        O BrazaReader não armazena, transmite ou compartilha qualquer arquivo do usuário.</p>
-
-        <p><b>3. Privacidade</b><br>
-        O aplicativo funciona completamente offline. Nenhum dado é enviado a servidores externos.
-        O progresso de leitura, favoritos e configurações são salvos apenas localmente no dispositivo.</p>
-
-        <p><b>4. Limitação de responsabilidade</b><br>
-        O software é fornecido "como está", sem garantias de qualquer tipo.
-        O desenvolvedor não se responsabiliza por perda de dados ou danos causados pelo uso do aplicativo.</p>
-
-        <p><b>5. Atualizações</b><br>
-        Estes termos podem ser atualizados em versões futuras do BrazaReader.
-        Recomenda-se verificar periodicamente por atualizações.</p>
-
-        <p style='color:#888; font-size:12px;'>BrazaReader v1.0.0 — Todos os direitos reservados.</p>
-    )");
-
-    mainLayout->addWidget(textEdit, 1);
+    QTextBrowser* text = new QTextBrowser(this);
+    text->setStyleSheet(
+        "QTextBrowser{background:#2b2b2b;color:#ddd;border:none;"
+        "font-size:13px;padding:20px;}");
+    text->setHtml(R"(
+<h2 style='color:#4CAF50;'>Termos de Uso — BrazaReader</h2>
+<p>Ao utilizar este software, você concorda com os termos abaixo.</p>
+<h3 style='color:#aaa;'>1. Uso Pessoal</h3>
+<p>O BrazaReader destina-se exclusivamente ao uso pessoal e não comercial.
+   É proibida a redistribuição sem autorização expressa do desenvolvedor.</p>
+<h3 style='color:#aaa;'>2. Arquivos PDF</h3>
+<p>O aplicativo acessa apenas PDFs que você fornecer. Nenhum arquivo é
+   transmitido para servidores externos. Todos os dados ficam localmente
+   no dispositivo.</p>
+<h3 style='color:#aaa;'>3. Privacidade</h3>
+<p>O BrazaReader não coleta, armazena nem transmite dados pessoais.
+   Progressos de leitura, favoritos e anotações são salvos apenas
+   localmente no banco de dados SQLite do dispositivo.</p>
+<h3 style='color:#aaa;'>4. Responsabilidade</h3>
+<p>O desenvolvedor não se responsabiliza por danos causados pelo uso
+   indevido do software ou por conteúdo dos PDFs lidos.</p>
+<h3 style='color:#aaa;'>5. Atualizações</h3>
+<p>Estes termos podem ser atualizados sem aviso prévio. Recomenda-se
+   verificar esta seção periodicamente.</p>
+<p style='color:#666; margin-top:30px;'>BrazaReader v1.0.0 — 2026</p>
+)");
+    lay->addWidget(text, 1);
 }
 
 void TermsScreen::setMenuColor(const QColor& color)
 {
-    topBar->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+    TopBarHelper::setColor(topBar, color);
 }

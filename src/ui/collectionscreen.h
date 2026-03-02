@@ -22,6 +22,7 @@ public:
 
     void refresh();
     void setMenuColor(const QColor& color);
+    void setWindowColor(const QColor& color);
 
 signals:
     void menuClicked();
@@ -38,19 +39,16 @@ private slots:
 private:
     void setupUI();
     void loadCollections();
-    void showCollectionBooks(int collectionId, const QString& collectionName);
+    void showCollectionBooks(int collectionId, const QString& name);
 
     QWidget*      topBar;
-    QPushButton*  menuButton;
-    QLabel*       titleLabel;
+    QWidget*      body;
 
-    // Painel esquerdo: lista de coleções
     QListWidget*  collectionList;
     QPushButton*  newCollBtn;
     QPushButton*  delCollBtn;
     QPushButton*  renameCollBtn;
 
-    // Painel direito: livros da coleção selecionada
     QLabel*       collectionTitle;
     QListWidget*  bookList;
     QPushButton*  addBookBtn;

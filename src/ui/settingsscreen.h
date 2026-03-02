@@ -25,31 +25,25 @@ signals:
     void menuClicked();
     void settingsChanged();
 
-private slots:
-    void onColorSelected(const QColor& color);
-    void onNightModeToggled(bool enabled);
-    void onResetDefaults();
-
 private:
     void setupUI();
     void loadCurrentSettings();
 
     QWidget*     topBar;
-    QPushButton* menuButton;
-    QLabel*      titleLabel;
+    QPushButton* menuBtn;
 
-    QLabel*      currentColorLabel;
-    QPushButton* colorButton;
-    QLabel*      currentBgLabel;
-    QPushButton* bgColorButton;
+    // Previews de cor
+    QLabel*      menuColorPreview = nullptr;
+    QLabel*      bgColorPreview   = nullptr;
+    QLabel*      winColorPreview  = nullptr;
 
     QSlider*     brightnessSlider;
+    QLabel*      brightnessLabel;
     QSlider*     amberSlider;
+    QLabel*      amberLabel;
 
     QCheckBox*   nightModeCheck;
     QCheckBox*   sepiaCheck;
-
-    QPushButton* resetButton;
 
     std::unique_ptr<SettingsManager> settingsManager;
 };

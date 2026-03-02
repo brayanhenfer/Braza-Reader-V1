@@ -10,26 +10,32 @@ public:
     SettingsManager();
     ~SettingsManager();
 
+    // Cor do menu (topbar)
     QColor getMenuColor() const;
-    void   setMenuColor(const QColor& color);
+    void   setMenuColor(const QColor& c);
 
+    // Cor de fundo do app (tela toda, "atrás" do conteúdo)
     QColor getBgColor() const;
-    void   setBgColor(const QColor& color);
+    void   setBgColor(const QColor& c);
+
+    // Cor de janela (cards, grades internas, painéis)
+    QColor getWindowColor() const;
+    void   setWindowColor(const QColor& c);
 
     bool getNightMode() const;
-    void setNightMode(bool enabled);
+    void setNightMode(bool e);
 
     bool getSepiaEnabled() const;
-    void setSepiaEnabled(bool enabled);
+    void setSepiaEnabled(bool e);
 
-    int  getAmberIntensity() const;      // 0–100
-    void setAmberIntensity(int value);
+    int  getAmberIntensity() const;
+    void setAmberIntensity(int v);
 
-    int  getBrightness() const;          // 20–100
-    void setBrightness(int value);
+    int  getBrightness() const;
+    void setBrightness(int v);
 
     int  getFontSize() const;
-    void setFontSize(int size);
+    void setFontSize(int s);
 
     void resetToDefaults();
 

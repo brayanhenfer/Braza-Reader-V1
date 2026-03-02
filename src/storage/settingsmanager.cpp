@@ -1,5 +1,6 @@
 #include "settingsmanager.h"
 #include <QStandardPaths>
+#include <QDir>
 
 SettingsManager::SettingsManager()
     : settings(std::make_unique<QSettings>(
@@ -10,19 +11,29 @@ SettingsManager::SettingsManager()
 SettingsManager::~SettingsManager() = default;
 
 QColor SettingsManager::getMenuColor() const {
-    QColor c(settings->value("ui/menu_color","#1e6432").toString());
-    return c.isValid() ? c : QColor(30,100,50);
+    QColor c(settings->value("ui/menu_color", "#1e6432").toString());
+    return c.isValid() ? c : QColor("#1e6432");
 }
 void SettingsManager::setMenuColor(const QColor& c) {
     settings->setValue("ui/menu_color", c.name()); settings->sync();
 }
 
+// Cor de fundo do app (espaço externo, default: cinza escuro do app)
 QColor SettingsManager::getBgColor() const {
-    QColor c(settings->value("ui/bg_color","#2b2b2b").toString());
-    return c.isValid() ? c : QColor(43,43,43);
+    QColor c(settings->value("ui/bg_color", "#1a1a1a").toString());
+    return c.isValid() ? c : QColor("#1a1a1a");
 }
 void SettingsManager::setBgColor(const QColor& c) {
     settings->setValue("ui/bg_color", c.name()); settings->sync();
+}
+
+// Cor de janela (cards/grades, default: cinza médio dos cards)
+QColor SettingsManager::getWindowColor() const {
+    QColor c(settings->value("ui/window_color", "#2b2b2b").toString());
+    return c.isValid() ? c : QColor("#2b2b2b");
+}
+void SettingsManager::setWindowColor(const QColor& c) {
+    settings->setValue("ui/window_color", c.name()); settings->sync();
 }
 
 bool SettingsManager::getNightMode() const {

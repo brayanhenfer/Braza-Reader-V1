@@ -1,5 +1,4 @@
 #include "libraryscreen.h"
-#include "collectionscreen.h"
 #include "../storage/librarymanager.h"
 #include "../storage/favoritemanager.h"
 #include "../storage/progressmanager.h"
@@ -30,7 +29,7 @@ void LibraryScreen::setupUI()
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // ── Topbar ───────────────────────────────────────────────────────────────
+    // ── Topbar com logo ───────────────────────────────────────────────────────
     topBar = new QWidget(this);
     topBar->setFixedHeight(50);
     topBar->setStyleSheet("background-color:#1e6432;");
@@ -45,16 +44,29 @@ void LibraryScreen::setupUI()
     connect(menuButton, &QPushButton::clicked, this, &LibraryScreen::menuClicked);
 
     // Logo centralizada
-    titleLabel = new QLabel("BrazaReader", topBar);
-    titleLabel->setStyleSheet("color:white;font-size:18px;font-weight:bold;");
-    titleLabel->setAlignment(Qt::AlignCenter);
+    logoLabel = new QLabel(topBar);
+    logoLabel->setAlignment(Qt::AlignCenter);
+    QPixmap logoPx(":/logo.png");
+    if (!logoPx.isNull()) {
+        logoLabel->setPixmap(logoPx.scaled(120, 34, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    } else {
+        logoLabel->setText("BrazaReader");
+        logoLabel->setStyleSheet("color:white;font-size:18px;font-weight:bold;");
+    }
+
+    // Título de contexto (ex: "Favoritos")
+    contextLabel = new QLabel("", topBar);
+    contextLabel->setStyleSheet("color:rgba(255,255,255,0.75);font-size:13px;");
+    contextLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    contextLabel->setFixedWidth(80);
 
     topLay->addWidget(menuButton);
-    topLay->addWidget(titleLabel, 1);
+    topLay->addWidget(logoLabel, 1);
+    topLay->addWidget(contextLabel);
     mainLayout->addWidget(topBar);
 
     // ── Barra de pesquisa ─────────────────────────────────────────────────────
-    // QLineEdit abre o teclado virtual do SO automaticamente no RPi com Qt5
+    // QLineEdit abre teclado virtual automaticamente em touchscreen (Qt5 com eglfs/xcb)
     searchBar = new QLineEdit(this);
     searchBar->setPlaceholderText("🔍  Buscar livro...");
     searchBar->setClearButtonEnabled(true);
@@ -65,21 +77,8 @@ void LibraryScreen::setupUI()
     connect(searchBar, &QLineEdit::textChanged, this, &LibraryScreen::onSearchTextChanged);
     mainLayout->addWidget(searchBar);
 
-    // ── Tabs ──────────────────────────────────────────────────────────────────
-    tabWidget = new QTabWidget(this);
-    tabWidget->setStyleSheet(
-        "QTabWidget::pane{border:none;background:#2b2b2b;}"
-        "QTabBar::tab{background:#222;color:#aaa;padding:10px 20px;font-size:13px;}"
-        "QTabBar::tab:selected{background:#1e6432;color:white;font-weight:bold;}"
-        "QTabBar::tab:hover{background:#333;}");
-
-    // Tab 1: Todos os livros
-    QWidget* allTab = new QWidget();
-    allTab->setStyleSheet("background:#2b2b2b;");
-    QVBoxLayout* allLay = new QVBoxLayout(allTab);
-    allLay->setContentsMargins(0, 0, 0, 0);
-
-    scrollArea = new QScrollArea(allTab);
+    // ── Grade de livros (sem tabs) ─────────────────────────────────────────────
+    scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
     scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scrollArea->setStyleSheet("QScrollArea{border:none;background:#2b2b2b;}");
@@ -91,46 +90,25 @@ void LibraryScreen::setupUI()
     gridLayout->setSpacing(12);
 
     scrollArea->setWidget(gridContainer);
-    allLay->addWidget(scrollArea);
-
-    tabWidget->addTab(allTab, "📚 Biblioteca");
-
-    // Tab 2: Favoritos (reutiliza o mesmo scrollArea, troca o conteúdo via showFavorites)
-    QWidget* favTab = new QWidget();
-    favTab->setStyleSheet("background:#2b2b2b;");
-    QVBoxLayout* favLay = new QVBoxLayout(favTab);
-    favLay->setContentsMargins(0, 0, 0, 0);
-    QLabel* favHint = new QLabel("Use o menu lateral → Favoritos", favTab);
-    favHint->setStyleSheet("color:#888;font-size:14px;");
-    favHint->setAlignment(Qt::AlignCenter);
-    favLay->addWidget(favHint, 1);
-    tabWidget->addTab(favTab, "★ Favoritos");
-
-    // Tab 3: Coleções
-    collectionScreen = new CollectionScreen();
-    connect(collectionScreen, &CollectionScreen::menuClicked, this, &LibraryScreen::menuClicked);
-    connect(collectionScreen, &CollectionScreen::bookOpened, this, &LibraryScreen::bookOpened);
-    tabWidget->addTab(collectionScreen, "📁 Coleções");
-
-    mainLayout->addWidget(tabWidget, 1);
-
-    // Muda tab "Favoritos" para mostrar a grade real
-    connect(tabWidget, &QTabWidget::currentChanged, this, [this](int idx) {
-        if (idx == 0) { showingFavorites = false; loadLibrary(); }
-        else if (idx == 1) showFavorites();
-        else if (idx == 2) collectionScreen->refresh();
-    });
+    mainLayout->addWidget(scrollArea, 1);
 }
 
 void LibraryScreen::setMenuColor(const QColor& color)
 {
     topBar->setStyleSheet(QString("background-color:%1;").arg(color.name()));
-    collectionScreen->setMenuColor(color);
+}
+
+void LibraryScreen::setWindowColor(const QColor& color)
+{
+    gridContainer->setStyleSheet(QString("background:%1;").arg(color.name()));
+    scrollArea->setStyleSheet(
+        QString("QScrollArea{border:none;background:%1;}").arg(color.name()));
 }
 
 void LibraryScreen::loadLibrary()
 {
     showingFavorites = false;
+    contextLabel->setText("");
     allBooksCache = libraryManager->scanLibrary();
     currentBooks  = allBooksCache;
     populateGrid(currentBooks);
@@ -139,47 +117,55 @@ void LibraryScreen::loadLibrary()
 void LibraryScreen::showFavorites()
 {
     showingFavorites = true;
-    tabWidget->setCurrentIndex(1);
+    contextLabel->setText("★ Favoritos");
 
-    QStringList favs  = favoriteManager->getAllFavorites();
-    QStringList all   = libraryManager->scanLibrary();
+    QStringList favs = favoriteManager->getAllFavorites();
+    QStringList all  = libraryManager->scanLibrary();
+    allBooksCache    = all; // mantém cache completo para pesquisa
     currentBooks.clear();
     for (const QString& p : all)
-        if (favs.contains(extractTitle(p))) currentBooks.append(p);
+        if (favs.contains(extractTitle(p)))
+            currentBooks.append(p);
 
     populateGrid(currentBooks);
 }
 
 void LibraryScreen::showAllBooks()
 {
-    tabWidget->setCurrentIndex(0);
     loadLibrary();
 }
 
 void LibraryScreen::onSearchTextChanged(const QString& text)
 {
+    QStringList base = showingFavorites ? currentBooks : allBooksCache;
+
     if (text.trimmed().isEmpty()) {
-        currentBooks = allBooksCache;
-    } else {
-        currentBooks.clear();
-        for (const QString& p : allBooksCache)
-            if (extractTitle(p).contains(text.trimmed(), Qt::CaseInsensitive))
-                currentBooks.append(p);
+        populateGrid(showingFavorites ? currentBooks : allBooksCache);
+        return;
     }
-    populateGrid(currentBooks);
+
+    QStringList filtered;
+    for (const QString& p : allBooksCache)
+        if (extractTitle(p).contains(text.trimmed(), Qt::CaseInsensitive))
+            filtered.append(p);
+    populateGrid(filtered);
 }
 
 void LibraryScreen::populateGrid(const QStringList& books)
 {
     clearGrid();
     if (books.isEmpty()) {
-        QLabel* empty = new QLabel("Nenhum livro encontrado.", gridContainer);
-        empty->setStyleSheet("color:#888;font-size:16px;");
+        QLabel* empty = new QLabel(
+            showingFavorites ? "Nenhum favorito.\nToque em ☆ para adicionar."
+                             : "Nenhum livro encontrado.", gridContainer);
+        empty->setStyleSheet("color:#888;font-size:15px;");
         empty->setAlignment(Qt::AlignCenter);
         gridLayout->addWidget(empty, 0, 0, 1, 3, Qt::AlignCenter);
         return;
     }
-    int row = 0, col = 0, cols = 3;
+
+    int row = 0, col = 0;
+    const int cols = 3;
     for (const QString& p : books) {
         addBookCard(p, row, col);
         if (++col >= cols) { col = 0; row++; }
@@ -202,14 +188,16 @@ void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
     bool    isFav  = favoriteManager->isFavorite(title);
     int     lastPg = progressManager->getLastPage(title);
 
-    // Progresso em %
+    // Calcula progresso sem bloquear muito tempo
     float pct = 0;
-    PDFRenderer tmpR;
-    if (tmpR.openPDF(filePath)) {
-        int total = tmpR.getPageCount();
-        if (total > 1) pct = float(lastPg) / float(total - 1) * 100.f;
-        else pct = 100.f;
-        tmpR.closePDF();
+    {
+        PDFRenderer tmp;
+        if (tmp.openPDF(filePath)) {
+            int total = tmp.getPageCount();
+            if (total > 1) pct = float(lastPg) / float(total - 1) * 100.f;
+            else            pct = 100.f;
+            tmp.closePDF();
+        }
     }
 
     QFrame* card = new QFrame(gridContainer);
@@ -220,23 +208,21 @@ void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
     cl->setContentsMargins(6, 6, 6, 6);
     cl->setSpacing(4);
 
-    // Miniatura da capa
+    // Miniatura
     QLabel* thumb = new QLabel(card);
     thumb->setFixedSize(198, 195);
     thumb->setAlignment(Qt::AlignCenter);
-    thumb->setStyleSheet("background:#555;border-radius:4px;");
+    thumb->setStyleSheet("background:#555;border-radius:4px;color:#aaa;font-size:32px;");
+    thumb->setText("📄");
 
-    PDFRenderer thumbR;
-    if (thumbR.openPDF(filePath)) {
-        QPixmap px = thumbR.renderPage(0, 198, 195);
-        if (!px.isNull())
-            thumb->setPixmap(px.scaled(198, 195, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        else
-            thumb->setText("📄");
-        thumbR.closePDF();
-    } else {
-        thumb->setText("📄");
-        thumb->setStyleSheet("background:#555;border-radius:4px;color:#aaa;font-size:36px;");
+    {
+        PDFRenderer tmp;
+        if (tmp.openPDF(filePath)) {
+            QPixmap px = tmp.renderPage(0, 198, 195);
+            if (!px.isNull())
+                thumb->setPixmap(px.scaled(198, 195, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            tmp.closePDF();
+        }
     }
 
     // Título
@@ -246,54 +232,59 @@ void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
     tl->setMaximumHeight(30);
 
     // Barra de progresso
-    QWidget* progressBar = new QWidget(card);
-    progressBar->setFixedHeight(4);
-    progressBar->setStyleSheet("background:#555;border-radius:2px;");
-    QWidget* progressFill = new QWidget(progressBar);
-    progressFill->setFixedHeight(4);
-    int fillW = qRound(198 * pct / 100.f);
-    progressFill->setFixedWidth(qMax(0, qMin(198, fillW)));
-    progressFill->setStyleSheet("background:#4CAF50;border-radius:2px;");
-
-    // % lido
-    QLabel* pctLabel = new QLabel(QString("%1%").arg(int(pct)), card);
-    pctLabel->setStyleSheet("color:#4CAF50;font-size:10px;");
-    pctLabel->setAlignment(Qt::AlignRight);
+    QWidget* progBar = new QWidget(card);
+    progBar->setFixedHeight(4);
+    progBar->setStyleSheet("background:#555;border-radius:2px;");
+    QWidget* fill = new QWidget(progBar);
+    fill->setFixedHeight(4);
+    fill->setFixedWidth(qBound(0, qRound(198 * pct / 100.f), 198));
+    fill->setStyleSheet("background:#4CAF50;border-radius:2px;");
 
     // Botões
-    QHBoxLayout* btnBar = new QHBoxLayout();
-    btnBar->setSpacing(4);
+    QHBoxLayout* btnRow = new QHBoxLayout();
+    btnRow->setSpacing(4);
 
     QPushButton* favBtn = new QPushButton(isFav ? "★" : "☆", card);
     favBtn->setFixedSize(28, 28);
     favBtn->setStyleSheet("QPushButton{background:transparent;color:#FFD700;font-size:18px;border:none;}");
+
+    QLabel* pctLbl = new QLabel(QString("%1%").arg(int(pct)), card);
+    pctLbl->setStyleSheet("color:#4CAF50;font-size:10px;");
+    pctLbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+    QPushButton* editBtn = new QPushButton("✎", card);
+    editBtn->setFixedSize(28, 28);
+    editBtn->setStyleSheet("QPushButton{background:transparent;color:#aaa;font-size:16px;border:none;}");
+
     connect(favBtn, &QPushButton::clicked, this, [this, title, favBtn]() {
         favoriteManager->toggleFavorite(title);
         favBtn->setText(favoriteManager->isFavorite(title) ? "★" : "☆");
         if (showingFavorites) showFavorites();
     });
+    connect(editBtn, &QPushButton::clicked, this, [this, filePath]() {
+        onRenameBook(filePath);
+    });
 
-    QPushButton* editBtn = new QPushButton("✎", card);
-    editBtn->setFixedSize(28, 28);
-    editBtn->setStyleSheet("QPushButton{background:transparent;color:#aaa;font-size:16px;border:none;}");
-    connect(editBtn, &QPushButton::clicked, this, [this, filePath]() { onRenameBook(filePath); });
-
-    btnBar->addWidget(favBtn);
-    btnBar->addStretch();
-    btnBar->addWidget(pctLabel);
-    btnBar->addWidget(editBtn);
+    btnRow->addWidget(favBtn);
+    btnRow->addStretch();
+    btnRow->addWidget(pctLbl);
+    btnRow->addWidget(editBtn);
 
     cl->addWidget(thumb);
     cl->addWidget(tl);
-    cl->addWidget(progressBar);
-    cl->addLayout(btnBar);
+    cl->addWidget(progBar);
+    cl->addLayout(btnRow);
 
-    // Overlay de abertura
+    // Overlay transparente para abrir livro
     QPushButton* overlay = new QPushButton(card);
     overlay->setGeometry(0, 0, 210, 250);
     overlay->setStyleSheet("background:transparent;border:none;");
-    overlay->raise(); favBtn->raise(); editBtn->raise();
-    connect(overlay, &QPushButton::clicked, this, [this, filePath]() { onBookClicked(filePath); });
+    overlay->raise();
+    favBtn->raise();
+    editBtn->raise();
+    connect(overlay, &QPushButton::clicked, this, [this, filePath]() {
+        emit bookOpened(filePath);
+    });
 
     gridLayout->addWidget(card, row, col, Qt::AlignTop);
 }
@@ -316,24 +307,31 @@ void LibraryScreen::onRenameBook(const QString& filePath)
     QFileInfo info(filePath);
     QString oldTitle = info.completeBaseName();
     bool ok;
-    QString newTitle = QInputDialog::getText(this, "Renomear PDF", "Novo nome:",
+    // QInputDialog abre teclado virtual em touchscreen
+    QString newTitle = QInputDialog::getText(this, "Renomear", "Novo nome:",
                                               QLineEdit::Normal, oldTitle, &ok);
     if (!ok || newTitle.trimmed().isEmpty() || newTitle == oldTitle) return;
 
     QString newPath = info.absolutePath() + "/" + newTitle.trimmed() + ".pdf";
     if (QFile::exists(newPath)) {
-        QMessageBox::warning(this, "Erro", "Já existe um arquivo com esse nome."); return;
+        QMessageBox::warning(this, "Erro", "Já existe um arquivo com esse nome.");
+        return;
     }
     if (!QFile::rename(filePath, newPath)) {
-        QMessageBox::warning(this, "Erro", "Não foi possível renomear."); return;
+        QMessageBox::warning(this, "Erro", "Não foi possível renomear.");
+        return;
     }
 
+    // Migra favoritos e progresso
     if (favoriteManager->isFavorite(oldTitle)) {
         favoriteManager->removeFavorite(oldTitle);
         favoriteManager->addFavorite(newTitle.trimmed());
     }
     int lp = progressManager->getLastPage(oldTitle);
-    if (lp > 0) { progressManager->clearProgress(oldTitle); progressManager->saveProgress(newTitle.trimmed(), lp); }
+    if (lp > 0) {
+        progressManager->clearProgress(oldTitle);
+        progressManager->saveProgress(newTitle.trimmed(), lp);
+    }
 
     if (showingFavorites) showFavorites(); else loadLibrary();
 }

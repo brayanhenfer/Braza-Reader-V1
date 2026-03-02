@@ -1,4 +1,5 @@
 #include "readerscreen.h"
+#include "topbar_helper.h"
 #include "../engine/pdfrenderer.h"
 #include "../engine/pdfcache.h"
 #include "../storage/progressmanager.h"
@@ -12,6 +13,7 @@
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QColorDialog>
+#include <QDialog>
 #include <QListWidget>
 #include <QScrollBar>
 #include <QTimer>
@@ -21,40 +23,32 @@
 // PageWidget
 // ═══════════════════════════════════════════════════════════════════════════════
 
-PageWidget::PageWidget(QWidget* parent)
-    : QLabel(parent)
+PageWidget::PageWidget(QWidget* parent) : QLabel(parent)
 {
     setAlignment(Qt::AlignCenter);
     pressTimer.setSingleShot(true);
-    pressTimer.setInterval(600); // 600ms para long press
+    pressTimer.setInterval(600);
     connect(&pressTimer, &QTimer::timeout, this, [this]() {
         emit longPressed(pressPos);
     });
 }
 
-void PageWidget::setPagePixmap(const QPixmap& px)
-{
-    setPixmap(px);
-    update();
-}
-
+void PageWidget::setPagePixmap(const QPixmap& px) { setPixmap(px); update(); }
 void PageWidget::setAmberIntensity(int i) { amberIntensity = i; update(); }
-void PageWidget::setSepiaEnabled(bool e)  { sepiaEnabled   = e; update(); }
+void PageWidget::setSepiaEnabled(bool e)  { sepiaEnabled = e; update(); }
 
 void PageWidget::paintEvent(QPaintEvent* e)
 {
     QLabel::paintEvent(e);
     if (amberIntensity <= 0 && !sepiaEnabled) return;
-
     QPainter p(this);
     if (sepiaEnabled) {
-        // Sépia: overlay marrom-âmbar com maior opacidade
-        p.fillRect(rect(), QColor(120, 80, 20, 60));
+        p.fillRect(rect(), QColor(120, 80, 20, 55));
     }
     if (amberIntensity > 0) {
-        // Âmbar: laranja quente, opacidade proporcional à intensidade
-        int alpha = qRound(amberIntensity * 1.8); // 0–100 → 0–180
-        p.fillRect(rect(), QColor(255, 147, 41, alpha));
+        // Âmbar real: sobreposição laranja-quente
+        int alpha = qBound(0, qRound(amberIntensity * 1.8), 200);
+        p.fillRect(rect(), QColor(255, 140, 0, alpha));
     }
 }
 
@@ -78,7 +72,7 @@ void PageWidget::mouseReleaseEvent(QMouseEvent* e)
 ReaderScreen::ReaderScreen(QWidget* parent)
     : QWidget(parent)
     , renderer(std::make_unique<PDFRenderer>())
-    , cache(std::make_unique<PDFCache>(4))          // cache de 4 páginas
+    , cache(std::make_unique<PDFCache>(4))
     , progressManager(std::make_unique<ProgressManager>())
     , annotManager(std::make_unique<AnnotationManager>())
 {
@@ -88,7 +82,7 @@ ReaderScreen::ReaderScreen(QWidget* parent)
 
 ReaderScreen::~ReaderScreen() { closeBook(); }
 
-// ── Setup da UI ───────────────────────────────────────────────────────────────
+// ── Setup ────────────────────────────────────────────────────────────────────
 
 void ReaderScreen::setupUI()
 {
@@ -100,51 +94,33 @@ void ReaderScreen::setupUI()
     setupScrollArea();
     setupBottomBar();
     setupAnnotationPanel();
-
-    // Overlay âmbar: widget transparente sobre o scrollArea
-    amberOverlay = new QWidget(this);
-    amberOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
-    amberOverlay->setAttribute(Qt::WA_NoSystemBackground);
-    amberOverlay->hide();
 }
 
 void ReaderScreen::setupTopBar()
 {
-    topBar = new QWidget(this);
-    topBar->setFixedHeight(50);
-    topBar->setStyleSheet("background-color: #1e6432;");
-
-    QHBoxLayout* lay = new QHBoxLayout(topBar);
-    lay->setContentsMargins(8, 4, 8, 4);
-
-    backButton = new QPushButton("←", topBar);
+    backButton = new QPushButton("←");
     backButton->setFixedSize(40, 40);
     backButton->setStyleSheet(
         "QPushButton{background:transparent;color:white;font-size:22px;border:none;}"
         "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
     connect(backButton, &QPushButton::clicked, this, &ReaderScreen::backClicked);
 
-    // Logo/título centralizado
-    titleLabel = new QLabel("", topBar);
-    titleLabel->setStyleSheet("color:white;font-size:13px;font-weight:bold;");
-    titleLabel->setAlignment(Qt::AlignCenter);
-
-    pageInfoLabel = new QLabel("", topBar);
-    pageInfoLabel->setStyleSheet("color:rgba(255,255,255,0.85);font-size:11px;");
-    pageInfoLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    pageInfoLabel->setFixedWidth(90);
-
-    annotBtn = new QPushButton("🖊", topBar);
+    annotBtn = new QPushButton("🖊");
     annotBtn->setFixedSize(36, 36);
     annotBtn->setStyleSheet(
         "QPushButton{background:transparent;color:white;font-size:18px;border:none;}"
         "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:18px;}");
     connect(annotBtn, &QPushButton::clicked, this, &ReaderScreen::onToggleAnnotationPanel);
 
-    lay->addWidget(backButton);
-    lay->addWidget(titleLabel, 1);
-    lay->addWidget(pageInfoLabel);
-    lay->addWidget(annotBtn);
+    topBar = TopBarHelper::create(this, backButton, annotBtn);
+
+    // Adiciona label de info de página à topbar existente
+    pageInfoLabel = new QLabel("", topBar);
+    pageInfoLabel->setStyleSheet("color:rgba(255,255,255,0.85);font-size:11px;min-width:80px;");
+    pageInfoLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    // Insere antes do annotBtn
+    auto* lay = qobject_cast<QHBoxLayout*>(topBar->layout());
+    if (lay) lay->insertWidget(lay->count() - 1, pageInfoLabel);
 
     mainLayout->addWidget(topBar);
 }
@@ -166,12 +142,16 @@ void ReaderScreen::setupScrollArea()
 
     scrollArea->setWidget(pagesContainer);
 
-    // Detectar página atual pelo scroll
-    connect(scrollArea->verticalScrollBar(), &QScrollBar::valueChanged,
-            this, &ReaderScreen::onScrollValueChanged);
-
-    // Toque na tela → esconde/mostra topbar e bottombar
+    // Instala filtro de evento para capturar toque no viewport
     scrollArea->viewport()->installEventFilter(this);
+
+    // Conecta scroll para atualizar página — usa timer para debounce
+    scrollDebounce = new QTimer(this);
+    scrollDebounce->setSingleShot(true);
+    scrollDebounce->setInterval(80); // 80ms debounce
+    connect(scrollArea->verticalScrollBar(), &QScrollBar::valueChanged,
+            this, [this](int) { scrollDebounce->start(); });
+    connect(scrollDebounce, &QTimer::timeout, this, &ReaderScreen::onScrollDebounced);
 
     mainLayout->addWidget(scrollArea, 1);
 }
@@ -180,7 +160,7 @@ void ReaderScreen::setupBottomBar()
 {
     bottomBar = new QWidget(this);
     bottomBar->setFixedHeight(44);
-    bottomBar->setStyleSheet("background:#1a1a1a;border-top:1px solid #333;");
+    bottomBar->setStyleSheet("background:#111;border-top:1px solid #333;");
 
     QHBoxLayout* lay = new QHBoxLayout(bottomBar);
     lay->setContentsMargins(8, 4, 8, 4);
@@ -220,55 +200,94 @@ void ReaderScreen::setupBottomBar()
 
 void ReaderScreen::setupAnnotationPanel()
 {
-    // Painel lateral que desliza da direita
     annotationPanel = new QWidget(this);
-    annotationPanel->setFixedWidth(280);
-    annotationPanel->setStyleSheet("background:#252525;border-left:1px solid #444;");
+    annotationPanel->setFixedWidth(270);
+    annotationPanel->setStyleSheet("background:#1e1e1e;border-left:1px solid #444;");
     annotationPanel->hide();
 
-    QVBoxLayout* panLay = new QVBoxLayout(annotationPanel);
-    panLay->setContentsMargins(12, 12, 12, 12);
-    panLay->setSpacing(10);
+    QVBoxLayout* pl = new QVBoxLayout(annotationPanel);
+    pl->setContentsMargins(12, 12, 12, 12);
+    pl->setSpacing(10);
 
-    QLabel* panTitle = new QLabel("Anotações", annotationPanel);
-    panTitle->setStyleSheet("color:white;font-size:16px;font-weight:bold;");
-    panLay->addWidget(panTitle);
+    QLabel* title = new QLabel("✏️ Anotações", annotationPanel);
+    title->setStyleSheet("color:white;font-size:16px;font-weight:bold;");
+    pl->addWidget(title);
 
-    // Botões de ação
-    struct BtnDef { QString label; QString slot; QColor color; };
-    QList<BtnDef> btns = {
-        {"🟡 Marcador Amarelo", "", QColor(255,235,59)},
-        {"🟢 Marcador Verde",   "", QColor(76,175,80)},
-        {"🔵 Marcador Azul",    "", QColor(33,150,243)},
-        {"🔴 Marcador Vermelho","", QColor(244,67,54)},
-    };
+    // Separador
+    QFrame* sep = new QFrame(annotationPanel);
+    sep->setFrameShape(QFrame::HLine);
+    sep->setStyleSheet("color:#444;");
+    pl->addWidget(sep);
 
-    for (const auto& bd : btns) {
-        QPushButton* b = new QPushButton(bd.label, annotationPanel);
-        b->setStyleSheet(
-            "QPushButton{background:#333;color:white;padding:8px;border-radius:6px;text-align:left;}"
-            "QPushButton:pressed{background:#555;}");
-        QColor c = bd.color;
-        connect(b, &QPushButton::clicked, this, [this, c]() { onAddHighlight(c); });
-        panLay->addWidget(b);
-    }
+    // ── Marcador com cor escolhida pelo usuário ───────────────────────────────
+    QLabel* hlLabel = new QLabel("Marcador:", annotationPanel);
+    hlLabel->setStyleSheet("color:#ccc;font-size:13px;");
+    pl->addWidget(hlLabel);
 
-    QPushButton* noteBtn = new QPushButton("📝 Adicionar Nota", annotationPanel);
-    noteBtn->setStyleSheet(
+    // Preview da cor atual do marcador
+    highlightColorPreview = new QLabel(annotationPanel);
+    highlightColorPreview->setFixedSize(32, 32);
+    currentHighlightColor = QColor(255, 235, 59); // amarelo padrão
+    highlightColorPreview->setStyleSheet(
+        QString("background:%1;border-radius:4px;border:2px solid #888;")
+        .arg(currentHighlightColor.name()));
+
+    QPushButton* chooseColorBtn = new QPushButton("🎨 Escolher Cor do Marcador", annotationPanel);
+    chooseColorBtn->setStyleSheet(
+        "QPushButton{background:#333;color:white;padding:8px;border-radius:6px;font-size:12px;}"
+        "QPushButton:pressed{background:#555;}");
+    connect(chooseColorBtn, &QPushButton::clicked, this, [this]() {
+        QColor c = QColorDialog::getColor(currentHighlightColor, this, "Cor do Marcador");
+        if (c.isValid()) {
+            currentHighlightColor = c;
+            highlightColorPreview->setStyleSheet(
+                QString("background:%1;border-radius:4px;border:2px solid #888;").arg(c.name()));
+        }
+    });
+
+    QPushButton* addHighlightBtn = new QPushButton("🖍 Marcar Página Atual", annotationPanel);
+    addHighlightBtn->setStyleSheet(
         "QPushButton{background:#1e6432;color:white;padding:8px;border-radius:6px;}"
         "QPushButton:pressed{background:#2a8040;}");
-    connect(noteBtn, &QPushButton::clicked, this, &ReaderScreen::onAddNote);
-    panLay->addWidget(noteBtn);
+    connect(addHighlightBtn, &QPushButton::clicked, this, [this]() {
+        onAddHighlight(currentHighlightColor);
+    });
 
-    QPushButton* listBtn = new QPushButton("📋 Ver Todas", annotationPanel);
+    QHBoxLayout* clrLay = new QHBoxLayout();
+    clrLay->addWidget(highlightColorPreview);
+    clrLay->addWidget(chooseColorBtn, 1);
+    pl->addLayout(clrLay);
+    pl->addWidget(addHighlightBtn);
+
+    // ── Nota de texto ─────────────────────────────────────────────────────────
+    QPushButton* noteBtn = new QPushButton("📝 Adicionar Nota de Texto", annotationPanel);
+    noteBtn->setStyleSheet(
+        "QPushButton{background:#2a5080;color:white;padding:8px;border-radius:6px;}"
+        "QPushButton:pressed{background:#3a6090;}");
+    connect(noteBtn, &QPushButton::clicked, this, &ReaderScreen::onAddNote);
+    pl->addWidget(noteBtn);
+
+    // ── Ver todas ──────────────────────────────────────────────────────────────
+    QPushButton* listBtn = new QPushButton("📋 Ver Todas as Anotações", annotationPanel);
     listBtn->setStyleSheet(noteBtn->styleSheet());
     connect(listBtn, &QPushButton::clicked, this, &ReaderScreen::onShowAnnotationsList);
-    panLay->addWidget(listBtn);
+    pl->addWidget(listBtn);
 
-    panLay->addStretch();
+    pl->addStretch();
+
+    // Botão fechar painel
+    QPushButton* closeBtn = new QPushButton("✕ Fechar", annotationPanel);
+    closeBtn->setStyleSheet(
+        "QPushButton{background:#333;color:white;padding:6px;border-radius:6px;}"
+        "QPushButton:pressed{background:#555;}");
+    connect(closeBtn, &QPushButton::clicked, this, [this]() {
+        annotationPanel->hide();
+        annotPanelVisible = false;
+    });
+    pl->addWidget(closeBtn);
 }
 
-// ── Abertura / fechamento ─────────────────────────────────────────────────────
+// ── Abertura / Fechamento ─────────────────────────────────────────────────────
 
 void ReaderScreen::openBook(const QString& filePath)
 {
@@ -281,24 +300,21 @@ void ReaderScreen::openBook(const QString& filePath)
         return;
     }
 
-    bookOpen   = true;
-    totalPages = renderer->getPageCount();
+    bookOpen    = true;
+    totalPages  = renderer->getPageCount();
     currentPage = progressManager->getLastPage(currentTitle);
     if (currentPage < 0 || currentPage >= totalPages) currentPage = 0;
 
-    titleLabel->setText(currentTitle);
     topBar->show();
     bottomBar->show();
     topBarVisible = true;
 
-    // Inicializa janela deslizante
     windowStart = qMax(0, currentPage - 1);
     renderVisiblePages();
 
-    // Scroll para a página salva
-    QTimer::singleShot(100, this, [this]() {
-        int pos = scrollPositionForPage(currentPage - windowStart);
-        scrollArea->verticalScrollBar()->setValue(pos);
+    QTimer::singleShot(150, this, [this]() {
+        int localIdx = currentPage - windowStart;
+        scrollArea->verticalScrollBar()->setValue(scrollPositionForPage(localIdx));
     });
 
     setFocus();
@@ -311,40 +327,41 @@ void ReaderScreen::closeBook()
     renderer->closePDF();
     cache->clearCache();
 
-    // Limpa widgets de página
     for (auto* w : pageWidgets) { pagesLayout->removeWidget(w); w->deleteLater(); }
     pageWidgets.clear();
 
     bookOpen    = false;
     currentPage = 0;
     totalPages  = 0;
-    titleLabel->clear();
     pageInfoLabel->clear();
     progressLabel->setText("0%");
 }
 
 // ── Renderização: janela deslizante de MAX_LOADED páginas ────────────────────
+// FIX BUG: ao trocar janela, preserva a posição de scroll relativa
 
 void ReaderScreen::renderVisiblePages()
 {
     if (!bookOpen) return;
 
-    // Limpa widgets antigos
-    for (auto* w : pageWidgets) { pagesLayout->removeWidget(w); w->deleteLater(); }
+    // Remove widgets antigos SEM deletar o container
+    for (auto* w : pageWidgets) {
+        pagesLayout->removeWidget(w);
+        w->deleteLater();
+    }
     pageWidgets.clear();
 
-    int end = qMin(windowStart + MAX_LOADED, totalPages);
+    int end    = qMin(windowStart + MAX_LOADED, totalPages);
     int availW = scrollArea->viewport()->width();
-    if (availW < 10) availW = 800;
+    if (availW < 10) availW = width() > 0 ? width() : 800;
 
     for (int p = windowStart; p < end; p++) {
         PageWidget* pw = new PageWidget(pagesContainer);
         pw->setAmberIntensity(amberIntensity);
         pw->setSepiaEnabled(sepiaEnabled);
 
-        // Largura = viewport * zoom, altura proporcional A4
         int renderW = qRound(availW * zoomFactor);
-        int renderH = qRound(renderW * 1.414f); // proporção A4
+        int renderH = qRound(renderW * 1.414f);
 
         QPixmap* cached = cache->getCachedPage(p);
         QPixmap  pix;
@@ -356,10 +373,8 @@ void ReaderScreen::renderVisiblePages()
         }
 
         if (!pix.isNull()) {
-            // Escala para caber no viewport mantendo aspecto
             QPixmap scaled = pix.scaled(renderW, renderH,
-                                         Qt::KeepAspectRatio,
-                                         Qt::SmoothTransformation);
+                                         Qt::KeepAspectRatio, Qt::SmoothTransformation);
             pw->setPagePixmap(scaled);
             pw->setFixedSize(scaled.size());
         } else {
@@ -367,10 +382,9 @@ void ReaderScreen::renderVisiblePages()
             pw->setFixedSize(renderW, renderH);
         }
 
-        // Long press → anotação
         connect(pw, &PageWidget::longPressed, this, [this, p](const QPoint&) {
             currentPage = p;
-            onToggleAnnotationPanel();
+            if (!annotPanelVisible) onToggleAnnotationPanel();
         });
 
         pagesLayout->addWidget(pw, 0, Qt::AlignHCenter);
@@ -381,57 +395,80 @@ void ReaderScreen::renderVisiblePages()
     updateProgressBar();
 }
 
-void ReaderScreen::loadPageIntoWidget(int pageIndex)
+// FIX BUG PRINCIPAL: ao expandir a janela, não reposiciona o scroll (deixa onde está)
+void ReaderScreen::expandWindowForward()
 {
-    // Chamado quando scroll chega perto do fim/início da janela
-    int newStart = qMax(0, pageIndex - 1);
-    if (newStart == windowStart) return;
-    windowStart = newStart;
+    if (windowStart + MAX_LOADED >= totalPages) return;
+
+    // Salva posição atual de scroll
+    int savedScroll = scrollArea->verticalScrollBar()->value();
+
+    // Calcula quanto espaço as páginas atuais ocupam (para compensar após remoção)
+    int removedHeight = 0;
+    if (!pageWidgets.isEmpty())
+        removedHeight = pageWidgets.first()->height() + 8;
+
+    // Move janela uma página à frente
+    windowStart++;
     renderVisiblePages();
+
+    // Reposiciona sem "pular" — subtrai a altura da página que foi removida do topo
+    QTimer::singleShot(0, this, [this, savedScroll, removedHeight]() {
+        int newPos = qMax(0, savedScroll - removedHeight);
+        scrollArea->verticalScrollBar()->setValue(newPos);
+    });
 }
 
-// ── Scroll → atualiza página atual e expande janela se necessário ─────────────
+void ReaderScreen::expandWindowBackward()
+{
+    if (windowStart <= 0) return;
 
-void ReaderScreen::onScrollValueChanged(int value)
+    int savedScroll = scrollArea->verticalScrollBar()->value();
+    windowStart--;
+    renderVisiblePages();
+
+    // Reposiciona adicionando a altura da nova página inserida no topo
+    QTimer::singleShot(0, this, [this, savedScroll]() {
+        int addedHeight = pageWidgets.isEmpty() ? 0 : pageWidgets.first()->height() + 8;
+        scrollArea->verticalScrollBar()->setValue(savedScroll + addedHeight);
+    });
+}
+
+// ── Scroll debounced ──────────────────────────────────────────────────────────
+
+void ReaderScreen::onScrollDebounced()
 {
     if (!bookOpen || pageWidgets.isEmpty()) return;
 
-    // Descobre qual PageWidget está mais visível
-    QScrollBar* sb   = scrollArea->verticalScrollBar();
-    int         vMax = sb->maximum();
-    if (vMax <= 0) return;
+    int scrollY = scrollArea->verticalScrollBar()->value();
+    int cumY    = 0;
+    int newPage = windowStart;
 
-    // Proporção do scroll → página aproximada no documento inteiro
-    float ratio = float(value) / float(vMax);
-    int   approx = qRound(ratio * (totalPages - 1));
-
-    // Página dentro da janela carregada
-    int localPage = windowStart;
-    int viewport_top = scrollArea->verticalScrollBar()->value();
-    int cumY = 0;
     for (int i = 0; i < pageWidgets.size(); i++) {
-        cumY += pageWidgets[i]->height() + 8;
-        if (cumY > viewport_top) {
-            localPage = windowStart + i;
+        int pageH = pageWidgets[i]->height() + 8;
+        if (scrollY < cumY + pageH) {
+            newPage = windowStart + i;
             break;
         }
+        cumY += pageH;
+        newPage = windowStart + i; // última página visível
     }
 
-    if (localPage != currentPage) {
-        currentPage = localPage;
+    if (newPage != currentPage) {
+        currentPage = newPage;
         updatePageInfo();
         updateProgressBar();
         progressManager->saveProgress(currentTitle, currentPage);
     }
 
-    // Expande janela se estiver perto do fim
-    int distToEnd = (windowStart + MAX_LOADED) - currentPage;
-    if (distToEnd <= 1 && windowStart + MAX_LOADED < totalPages) {
-        loadPageIntoWidget(currentPage + 1);
-    }
-    // Expande para trás se perto do início
-    if (currentPage <= windowStart && windowStart > 0) {
-        loadPageIntoWidget(currentPage);
+    // FIX: expande janela apenas quando o scroll chegou perto do fim/início da janela
+    int distToEnd   = (windowStart + MAX_LOADED - 1) - currentPage;
+    int distToStart = currentPage - windowStart;
+
+    if (distToEnd <= 0 && windowStart + MAX_LOADED < totalPages) {
+        expandWindowForward();
+    } else if (distToStart <= 0 && windowStart > 0) {
+        expandWindowBackward();
     }
 }
 
@@ -449,8 +486,8 @@ void ReaderScreen::updatePageInfo()
 {
     if (!bookOpen) return;
     float pct = totalPages > 1 ? float(currentPage) / float(totalPages - 1) * 100.f : 100.f;
-    pageInfoLabel->setText(QString("%1/%2  (%3%)")
-                           .arg(currentPage + 1).arg(totalPages).arg(int(pct)));
+    pageInfoLabel->setText(
+        QString("%1/%2 (%3%)").arg(currentPage + 1).arg(totalPages).arg(int(pct)));
 }
 
 void ReaderScreen::updateProgressBar()
@@ -458,6 +495,33 @@ void ReaderScreen::updateProgressBar()
     if (!bookOpen) return;
     float pct = totalPages > 1 ? float(currentPage) / float(totalPages - 1) * 100.f : 100.f;
     progressLabel->setText(QString("%1%").arg(int(pct)));
+}
+
+// ── Tema ─────────────────────────────────────────────────────────────────────
+
+void ReaderScreen::setMenuColor(const QColor& color)
+{
+    TopBarHelper::setColor(topBar, color);
+}
+
+void ReaderScreen::applyNightMode(bool enabled)
+{
+    nightMode = enabled;
+    QString bg = enabled ? "#080808" : "#1a1a1a";
+    pagesContainer->setStyleSheet(QString("background:%1;").arg(bg));
+    scrollArea->setStyleSheet(QString("QScrollArea{border:none;background:%1;}").arg(bg));
+}
+
+void ReaderScreen::setAmberIntensity(int v)
+{
+    amberIntensity = v;
+    for (auto* pw : pageWidgets) pw->setAmberIntensity(v);
+}
+
+void ReaderScreen::setSepiaEnabled(bool e)
+{
+    sepiaEnabled = e;
+    for (auto* pw : pageWidgets) pw->setSepiaEnabled(e);
 }
 
 // ── Zoom ──────────────────────────────────────────────────────────────────────
@@ -478,24 +542,54 @@ void ReaderScreen::onZoomOut()
     renderVisiblePages();
 }
 
-// ── Navegação teclado ─────────────────────────────────────────────────────────
+// ── Toggle topbar/bottombar por toque ────────────────────────────────────────
+// FIX: eventFilter corrigido — toque simples (não arrasto) alterna as barras
+
+bool ReaderScreen::eventFilter(QObject* obj, QEvent* ev)
+{
+    if (obj == scrollArea->viewport()) {
+        if (ev->type() == QEvent::MouseButtonPress) {
+            tapStartPos = static_cast<QMouseEvent*>(ev)->pos();
+            tapMoved    = false;
+        } else if (ev->type() == QEvent::MouseMove) {
+            auto* me = static_cast<QMouseEvent*>(ev);
+            if ((me->pos() - tapStartPos).manhattanLength() > 10)
+                tapMoved = true;
+        } else if (ev->type() == QEvent::MouseButtonRelease) {
+            if (!tapMoved) {
+                // Toque simples → toggle barras
+                topBarVisible = !topBarVisible;
+                topBar->setVisible(topBarVisible);
+                bottomBar->setVisible(topBarVisible);
+                if (annotPanelVisible && !topBarVisible) {
+                    annotationPanel->hide();
+                    annotPanelVisible = false;
+                }
+            }
+            tapMoved = false;
+        }
+    }
+    return QWidget::eventFilter(obj, ev);
+}
+
+// ── Navegação por teclado ─────────────────────────────────────────────────────
 
 void ReaderScreen::onPreviousPage()
 {
     if (!bookOpen || currentPage <= 0) return;
     currentPage--;
-    if (currentPage < windowStart) loadPageIntoWidget(currentPage);
-    int pos = scrollPositionForPage(currentPage - windowStart);
-    scrollArea->verticalScrollBar()->setValue(pos);
+    if (currentPage < windowStart) expandWindowBackward();
+    scrollArea->verticalScrollBar()->setValue(
+        scrollPositionForPage(currentPage - windowStart));
 }
 
 void ReaderScreen::onNextPage()
 {
     if (!bookOpen || currentPage >= totalPages - 1) return;
     currentPage++;
-    if (currentPage >= windowStart + MAX_LOADED) loadPageIntoWidget(currentPage);
-    int pos = scrollPositionForPage(currentPage - windowStart);
-    scrollArea->verticalScrollBar()->setValue(pos);
+    if (currentPage >= windowStart + MAX_LOADED) expandWindowForward();
+    scrollArea->verticalScrollBar()->setValue(
+        scrollPositionForPage(currentPage - windowStart));
 }
 
 void ReaderScreen::keyPressEvent(QKeyEvent* event)
@@ -504,54 +598,27 @@ void ReaderScreen::keyPressEvent(QKeyEvent* event)
     switch (event->key()) {
         case Qt::Key_Down: case Qt::Key_PageDown: case Qt::Key_Space: onNextPage(); break;
         case Qt::Key_Up:   case Qt::Key_PageUp:                       onPreviousPage(); break;
-        case Qt::Key_Plus: case Qt::Key_Equal:  onZoomIn();  break;
-        case Qt::Key_Minus:                     onZoomOut(); break;
+        case Qt::Key_Plus: case Qt::Key_Equal: onZoomIn();  break;
+        case Qt::Key_Minus:                    onZoomOut(); break;
         case Qt::Key_Escape: emit backClicked(); break;
         default: QWidget::keyPressEvent(event);
     }
 }
 
-// ── Resize: re-renderiza com novo tamanho ─────────────────────────────────────
-
 void ReaderScreen::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
-    if (bookOpen) {
-        cache->clearCache();
-        renderVisiblePages();
-    }
-    // Reposiciona overlay âmbar
-    if (amberOverlay) {
-        amberOverlay->setGeometry(scrollArea->geometry());
-    }
-}
+    if (bookOpen) { cache->clearCache(); renderVisiblePages(); }
 
-// ── Cor do menu ───────────────────────────────────────────────────────────────
-
-void ReaderScreen::setMenuColor(const QColor& color)
-{
-    topBar->setStyleSheet(QString("background-color:%1;").arg(color.name()));
-}
-
-// ── Modo noturno ──────────────────────────────────────────────────────────────
-// Implementado via overlay escuro semitransparente sobre todo o widget
-void ReaderScreen::applyNightMode(bool enabled)
-{
-    nightMode = enabled;
-    QString bgColor = enabled ? "#0a0a0a" : "#1a1a1a";
-    pagesContainer->setStyleSheet(QString("background:%1;").arg(bgColor));
-    scrollArea->setStyleSheet(QString("QScrollArea{border:none;background:%1;}").arg(bgColor));
-    bottomBar->setStyleSheet(QString("background:%1;border-top:1px solid #333;").arg(
-        enabled ? "#050505" : "#1a1a1a"));
-}
-
-// ── Filtros visuais ───────────────────────────────────────────────────────────
-
-void ReaderScreen::applyVisualFilters()
-{
-    for (auto* pw : pageWidgets) {
-        pw->setAmberIntensity(amberIntensity);
-        pw->setSepiaEnabled(sepiaEnabled);
+    // Reposiciona painel de anotações se visível
+    if (annotPanelVisible) {
+        annotationPanel->setGeometry(
+            width() - 270,
+            topBar->isVisible() ? topBar->height() : 0,
+            270,
+            height() - (topBar->isVisible() ? topBar->height() : 0)
+                      - (bottomBar->isVisible() ? bottomBar->height() : 0)
+        );
     }
 }
 
@@ -563,8 +630,11 @@ void ReaderScreen::onToggleAnnotationPanel()
     if (annotPanelVisible) {
         annotationPanel->setParent(this);
         annotationPanel->setGeometry(
-            width() - 280, topBar->height(),
-            280, height() - topBar->height() - bottomBar->height()
+            width() - 270,
+            topBar->isVisible() ? topBar->height() : 0,
+            270,
+            height() - (topBar->isVisible() ? topBar->height() : 0)
+                      - (bottomBar->isVisible() ? bottomBar->height() : 0)
         );
         annotationPanel->raise();
         annotationPanel->show();
@@ -576,41 +646,46 @@ void ReaderScreen::onToggleAnnotationPanel()
 void ReaderScreen::onAddHighlight(const QColor& color)
 {
     if (!bookOpen) return;
-    // Na prática, o texto selecionado viria de um mecanismo de seleção de texto do MuPDF.
-    // Por ora, registramos um marcador de posição para a página atual.
-    annotManager->addHighlight(currentTitle, currentPage, "(marcação na página)", color);
-    annotationPanel->hide();
-    annotPanelVisible = false;
+    // Registra marcação para a página atual com a cor escolhida
+    annotManager->addHighlight(currentTitle, currentPage,
+        QString("Página %1").arg(currentPage + 1), color);
+
+    // Feedback visual: pisca a borda da página atual
+    if (currentPage - windowStart < pageWidgets.size()) {
+        PageWidget* pw = pageWidgets[currentPage - windowStart];
+        QString orig = pw->styleSheet();
+        pw->setStyleSheet(QString("border: 3px solid %1;").arg(color.name()));
+        QTimer::singleShot(600, pw, [pw, orig]() { pw->setStyleSheet(orig); });
+    }
 }
 
 void ReaderScreen::onAddNote()
 {
     if (!bookOpen) return;
+    // QInputDialog abre teclado virtual automaticamente em touchscreen
     bool ok;
     QString note = QInputDialog::getMultiLineText(
         this, "Nova Anotação",
-        QString("Anotação para página %1:").arg(currentPage + 1),
-        "", &ok
-    );
-    if (ok && !note.trimmed().isEmpty()) {
+        QString("Nota para página %1:").arg(currentPage + 1),
+        "", &ok);
+    if (ok && !note.trimmed().isEmpty())
         annotManager->addNote(currentTitle, currentPage, note.trimmed());
-    }
-    annotationPanel->hide();
-    annotPanelVisible = false;
 }
 
 void ReaderScreen::onToggleBookmark()
 {
     if (!bookOpen) return;
     if (annotManager->hasBookmark(currentTitle, currentPage)) {
-        // Remove bookmark existente
         auto anns = annotManager->getAnnotationsForPage(currentTitle, currentPage);
         for (const auto& a : anns)
             if (a.type == Annotation::Bookmark) annotManager->removeAnnotation(a.id);
-        bookmarkBtn->setText("🔖");
+        bookmarkBtn->setStyleSheet(
+            "QPushButton{background:transparent;color:white;font-size:18px;border:none;}");
     } else {
         annotManager->addBookmark(currentTitle, currentPage);
-        bookmarkBtn->setText("🔖✓");
+        bookmarkBtn->setStyleSheet(
+            "QPushButton{background:rgba(255,200,0,0.3);color:#FFD700;font-size:18px;"
+            "border:none;border-radius:18px;}");
     }
 }
 
@@ -622,42 +697,40 @@ void ReaderScreen::onShowAnnotationsList()
 
     QDialog* dlg = new QDialog(this);
     dlg->setWindowTitle("Anotações — " + currentTitle);
-    dlg->setStyleSheet("background:#252525;color:white;");
-    dlg->resize(600, 400);
+    dlg->setStyleSheet("background:#1e1e1e;color:white;");
+    dlg->resize(580, 420);
 
     QVBoxLayout* lay = new QVBoxLayout(dlg);
     QListWidget* list = new QListWidget(dlg);
     list->setStyleSheet(
-        "QListWidget{background:#1e1e1e;color:white;border:none;}"
-        "QListWidget::item{padding:8px;border-bottom:1px solid #333;}"
+        "QListWidget{background:#151515;color:white;border:none;}"
+        "QListWidget::item{padding:10px;border-bottom:1px solid #333;}"
         "QListWidget::item:selected{background:#1e6432;}");
 
     auto allAnns = annotManager->getAllAnnotations(currentTitle);
     for (const auto& a : allAnns) {
-        QString typeStr = (a.type == Annotation::Highlight) ? "🟡 Marcação" :
+        QString typeStr = (a.type == Annotation::Highlight) ? "🖍 Marcação" :
                           (a.type == Annotation::Note)      ? "📝 Nota" : "🔖 Marcador";
-        QString text = QString("[P.%1] %2\n%3")
-                       .arg(a.pageNumber + 1)
-                       .arg(typeStr)
-                       .arg(a.noteText.isEmpty() ? a.selectedText : a.noteText);
-        QListWidgetItem* item = new QListWidgetItem(text, list);
+        QString body = a.noteText.isEmpty() ? a.selectedText : a.noteText;
+        QListWidgetItem* item = new QListWidgetItem(
+            QString("[P.%1] %2  %3").arg(a.pageNumber + 1).arg(typeStr).arg(body), list);
         item->setData(Qt::UserRole, a.id);
+        item->setData(Qt::UserRole + 1, a.pageNumber);
+        if (a.type == Annotation::Highlight)
+            item->setForeground(a.highlightColor);
+        list->addItem(item);
     }
 
-    // Ir para página ao clicar
-    connect(list, &QListWidget::itemDoubleClicked, this, [this, dlg, allAnns](QListWidgetItem* item) {
-        int id = item->data(Qt::UserRole).toInt();
-        for (const auto& a : allAnns) {
-            if (a.id == id) {
-                dlg->accept();
-                currentPage = a.pageNumber;
-                if (currentPage < windowStart || currentPage >= windowStart + MAX_LOADED)
-                    loadPageIntoWidget(currentPage);
-                int pos = scrollPositionForPage(currentPage - windowStart);
-                scrollArea->verticalScrollBar()->setValue(pos);
-                break;
-            }
-        }
+    connect(list, &QListWidget::itemDoubleClicked, this, [this, dlg](QListWidgetItem* item) {
+        int page = item->data(Qt::UserRole + 1).toInt();
+        dlg->accept();
+        currentPage = page;
+        windowStart = qMax(0, page - 1);
+        renderVisiblePages();
+        QTimer::singleShot(100, this, [this]() {
+            scrollArea->verticalScrollBar()->setValue(
+                scrollPositionForPage(currentPage - windowStart));
+        });
     });
 
     QPushButton* closeBtn = new QPushButton("Fechar", dlg);
@@ -668,19 +741,4 @@ void ReaderScreen::onShowAnnotationsList()
     lay->addWidget(closeBtn);
     dlg->exec();
     dlg->deleteLater();
-}
-
-// ── eventFilter para toque na área de scroll → toggle topbar/bottombar ────────
-bool ReaderScreen::eventFilter(QObject* obj, QEvent* ev)
-{
-    if (obj == scrollArea->viewport() && ev->type() == QEvent::MouseButtonPress) {
-        auto* me = static_cast<QMouseEvent*>(ev);
-        // Toque na margem superior da viewport → toggle bars
-        if (me->pos().y() < 60) {
-            topBarVisible = !topBarVisible;
-            topBar->setVisible(topBarVisible);
-            bottomBar->setVisible(topBarVisible);
-        }
-    }
-    return QWidget::eventFilter(obj, ev);
 }

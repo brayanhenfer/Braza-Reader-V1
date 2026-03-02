@@ -7,15 +7,14 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QLineEdit>
-#include <QTabWidget>
 #include <QStringList>
 #include <QColor>
+#include <QPixmap>
 #include <memory>
 
 class LibraryManager;
 class FavoriteManager;
 class ProgressManager;
-class CollectionScreen;
 
 class LibraryScreen : public QWidget
 {
@@ -29,6 +28,7 @@ public:
     void showFavorites();
     void showAllBooks();
     void setMenuColor(const QColor& color);
+    void setWindowColor(const QColor& color);   // cor de fundo da grade
 
 signals:
     void menuClicked();
@@ -47,24 +47,15 @@ private:
     void populateGrid(const QStringList& books);
     QString extractTitle(const QString& filePath) const;
 
-    QVBoxLayout*   mainLayout;
-    QWidget*       topBar;
-    QPushButton*   menuButton;
-    QLabel*        titleLabel;
-
-    // Barra de pesquisa com teclado virtual (QLineEdit abre teclado do SO)
-    QLineEdit*     searchBar;
-
-    // Tabs: Todos | Favoritos | Coleções
-    QTabWidget*    tabWidget;
-
-    // Tab Todos/Favoritos compartilha o mesmo grid
-    QScrollArea*   scrollArea;
-    QWidget*       gridContainer;
-    QGridLayout*   gridLayout;
-
-    // Tab Coleções
-    CollectionScreen* collectionScreen;
+    QVBoxLayout*  mainLayout;
+    QWidget*      topBar;
+    QPushButton*  menuButton;
+    QLabel*       logoLabel;
+    QLabel*       contextLabel;   // "★ Favoritos" ou vazio
+    QLineEdit*    searchBar;
+    QScrollArea*  scrollArea;
+    QWidget*      gridContainer;
+    QGridLayout*  gridLayout;
 
     std::unique_ptr<LibraryManager>  libraryManager;
     std::unique_ptr<FavoriteManager> favoriteManager;

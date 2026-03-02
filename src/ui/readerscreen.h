@@ -7,9 +7,9 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
-#include <QSlider>
 #include <QColor>
 #include <QTimer>
+#include <QPoint>
 #include <memory>
 
 class PDFRenderer;
@@ -17,14 +17,14 @@ class PDFCache;
 class ProgressManager;
 class AnnotationManager;
 
-// ─── Widget interno: exibe uma única página com overlay de anotações ──────────
+// ─── Widget de página com filtros visuais ────────────────────────────────────
 class PageWidget : public QLabel
 {
     Q_OBJECT
 public:
     explicit PageWidget(QWidget* parent = nullptr);
     void setPagePixmap(const QPixmap& px);
-    void setAmberIntensity(int intensity);  // 0–100
+    void setAmberIntensity(int intensity);
     void setSepiaEnabled(bool enabled);
 
 signals:
@@ -36,13 +36,13 @@ protected:
     void mouseReleaseEvent(QMouseEvent* e) override;
 
 private:
-    QTimer  pressTimer;
-    QPoint  pressPos;
-    int     amberIntensity = 0;
-    bool    sepiaEnabled   = false;
+    QTimer pressTimer;
+    QPoint pressPos;
+    int    amberIntensity = 0;
+    bool   sepiaEnabled   = false;
 };
 
-// ─── Tela principal de leitura ────────────────────────────────────────────────
+// ─── Tela de leitura ─────────────────────────────────────────────────────────
 class ReaderScreen : public QWidget
 {
     Q_OBJECT
@@ -55,6 +55,8 @@ public:
     void closeBook();
     void setMenuColor(const QColor& color);
     void applyNightMode(bool enabled);
+    void setAmberIntensity(int v);
+    void setSepiaEnabled(bool e);
 
 signals:
     void backClicked();
@@ -70,10 +72,10 @@ private slots:
     void onZoomIn();
     void onZoomOut();
     void onToggleAnnotationPanel();
-    void onAddNote();
     void onAddHighlight(const QColor& color);
+    void onAddNote();
     void onToggleBookmark();
-    void onScrollValueChanged(int value);
+    void onScrollDebounced();
     void onShowAnnotationsList();
 
 private:
@@ -84,64 +86,58 @@ private:
     void setupAnnotationPanel();
 
     void renderVisiblePages();
-    void loadPageIntoWidget(int pageIndex);
+    void expandWindowForward();
+    void expandWindowBackward();
     void updatePageInfo();
     void updateProgressBar();
-    void applyVisualFilters();
-    void showAnnotationDialog(const QString& type);
+    int  scrollPositionForPage(int localIndex) const;
 
-    int  pageAtScrollPosition() const;
-    int  scrollPositionForPage(int page) const;
+    // Layout
+    QVBoxLayout*       mainLayout;
+    QWidget*           topBar;
+    QPushButton*       backButton;
+    QLabel*            pageInfoLabel;
+    QPushButton*       annotBtn;
 
-    // ── Layout ────────────────────────────────────────────────────────────────
-    QVBoxLayout*  mainLayout;
+    QScrollArea*       scrollArea;
+    QWidget*           pagesContainer;
+    QVBoxLayout*       pagesLayout;
+    QList<PageWidget*> pageWidgets;
 
-    // Topbar (some ao toque)
-    QWidget*      topBar;
-    QPushButton*  backButton;
-    QLabel*       titleLabel;
-    QLabel*       pageInfoLabel;    // "12/340  (3.5%)"
-    QPushButton*  annotBtn;         // 🖊
+    QWidget*           bottomBar;
+    QPushButton*       zoomInBtn;
+    QPushButton*       zoomOutBtn;
+    QPushButton*       bookmarkBtn;
+    QLabel*            progressLabel;
 
-    // Área de scroll contínuo
-    QScrollArea*  scrollArea;
-    QWidget*      pagesContainer;
-    QVBoxLayout*  pagesLayout;
-    QList<PageWidget*> pageWidgets; // janela deslizante de 4 páginas
+    QWidget*           annotationPanel;
+    QLabel*            highlightColorPreview;
+    QColor             currentHighlightColor;
+    bool               annotPanelVisible = false;
 
-    // Barra inferior (zoom + bookmark + filtros)
-    QWidget*      bottomBar;
-    QPushButton*  zoomInBtn;
-    QPushButton*  zoomOutBtn;
-    QPushButton*  bookmarkBtn;
-    QLabel*       progressLabel;    // "3.5%"
+    QTimer*            scrollDebounce;
 
-    // Painel lateral de anotações (toggle)
-    QWidget*      annotationPanel;
-    bool          annotPanelVisible = false;
+    // Estado de toque (para detectar tap vs scroll)
+    QPoint             tapStartPos;
+    bool               tapMoved = false;
 
-    // Overlay âmbar (widget semitransparente sobre o scrollArea)
-    QWidget*      amberOverlay;
-
-    // ── Estado ────────────────────────────────────────────────────────────────
-    std::unique_ptr<PDFRenderer>      renderer;
-    std::unique_ptr<PDFCache>         cache;
-    std::unique_ptr<ProgressManager>  progressManager;
+    // Engine
+    std::unique_ptr<PDFRenderer>       renderer;
+    std::unique_ptr<PDFCache>          cache;
+    std::unique_ptr<ProgressManager>   progressManager;
     std::unique_ptr<AnnotationManager> annotManager;
 
     QString currentFilePath;
     QString currentTitle;
-    int     currentPage      = 0;
-    int     totalPages       = 0;
-    float   zoomFactor       = 1.0f;
-    bool    bookOpen         = false;
-    bool    topBarVisible    = true;
-    bool    nightMode        = false;
-    int     amberIntensity   = 0;    // 0–100
-    bool    sepiaEnabled     = false;
-    int     brightness       = 100;  // 0–100
+    int     currentPage    = 0;
+    int     totalPages     = 0;
+    float   zoomFactor     = 1.0f;
+    bool    bookOpen       = false;
+    bool    topBarVisible  = true;
+    bool    nightMode      = false;
+    int     amberIntensity = 0;
+    bool    sepiaEnabled   = false;
 
-    // Janela deslizante: quais páginas estão carregadas no layout
-    int     windowStart      = 0;    // primeira página carregada
-    static constexpr int MAX_LOADED = 4; // máximo 4 páginas em memória
+    int windowStart = 0;
+    static constexpr int MAX_LOADED = 4;
 };

@@ -5,19 +5,16 @@
 #include "settingsscreen.h"
 #include "aboutscreen.h"
 #include "termsscreen.h"
+#include "collectionscreen.h"
 #include "../storage/settingsmanager.h"
 
-#include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QTouchEvent>
 #include <QPalette>
 #include <QEvent>
-#include <QGuiApplication>
-#include <QScreen>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
-    , sidebarOpen(false)
     , settingsManager(std::make_unique<SettingsManager>())
 {
     setAttribute(Qt::WA_AcceptTouchEvents);
@@ -35,9 +32,9 @@ MainWindow::~MainWindow() = default;
 void MainWindow::setupUI()
 {
     centralWidget = new QWidget(this);
-    QHBoxLayout* mainLayout = new QHBoxLayout(centralWidget);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
+    QHBoxLayout* lay = new QHBoxLayout(centralWidget);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setSpacing(0);
 
     sidebar = new SidebarMenu(this);
     sidebar->setMaximumWidth(250);
@@ -45,57 +42,66 @@ void MainWindow::setupUI()
 
     screenStack = new QStackedWidget(this);
 
-    libraryScreen  = std::make_unique<LibraryScreen>();
-    readerScreen   = std::make_unique<ReaderScreen>();
-    settingsScreen = std::make_unique<SettingsScreen>();
-    aboutScreen    = std::make_unique<AboutScreen>();
-    termsScreen    = std::make_unique<TermsScreen>();
+    libraryScreen    = std::make_unique<LibraryScreen>();
+    readerScreen     = std::make_unique<ReaderScreen>();
+    settingsScreen   = std::make_unique<SettingsScreen>();
+    aboutScreen      = std::make_unique<AboutScreen>();
+    termsScreen      = std::make_unique<TermsScreen>();
+    collectionScreen = std::make_unique<CollectionScreen>();
 
     screenStack->addWidget(libraryScreen.get());
     screenStack->addWidget(readerScreen.get());
     screenStack->addWidget(settingsScreen.get());
     screenStack->addWidget(aboutScreen.get());
     screenStack->addWidget(termsScreen.get());
+    screenStack->addWidget(collectionScreen.get());
     screenStack->setCurrentWidget(libraryScreen.get());
 
-    mainLayout->addWidget(sidebar);
-    mainLayout->addWidget(screenStack, 1);
+    lay->addWidget(sidebar);
+    lay->addWidget(screenStack, 1);
     setCentralWidget(centralWidget);
 }
 
 void MainWindow::connectSignals()
 {
-    connect(libraryScreen.get(),  &LibraryScreen::menuClicked,      this, &MainWindow::onMenuClicked);
-    connect(libraryScreen.get(),  &LibraryScreen::bookOpened,       this, &MainWindow::onOpenBook);
-    connect(readerScreen.get(),   &ReaderScreen::backClicked,       this, &MainWindow::onCloseReader);
-    connect(settingsScreen.get(), &SettingsScreen::menuClicked,     this, &MainWindow::onMenuClicked);
-    connect(settingsScreen.get(), &SettingsScreen::settingsChanged, this, &MainWindow::onSettingsChanged);
-    connect(aboutScreen.get(),    &AboutScreen::menuClicked,        this, &MainWindow::onMenuClicked);
-    connect(termsScreen.get(),    &TermsScreen::backClicked,        this, &MainWindow::onNavigateToAbout);
+    connect(libraryScreen.get(),    &LibraryScreen::menuClicked,      this, &MainWindow::onMenuClicked);
+    connect(libraryScreen.get(),    &LibraryScreen::bookOpened,       this, &MainWindow::onOpenBook);
+    connect(collectionScreen.get(), &CollectionScreen::menuClicked,   this, &MainWindow::onMenuClicked);
+    connect(collectionScreen.get(), &CollectionScreen::bookOpened,    this, &MainWindow::onOpenBook);
+    connect(readerScreen.get(),     &ReaderScreen::backClicked,       this, &MainWindow::onCloseReader);
+    connect(settingsScreen.get(),   &SettingsScreen::menuClicked,     this, &MainWindow::onMenuClicked);
+    connect(settingsScreen.get(),   &SettingsScreen::settingsChanged, this, &MainWindow::onSettingsChanged);
+    connect(aboutScreen.get(),      &AboutScreen::menuClicked,        this, &MainWindow::onMenuClicked);
 
-    connect(sidebar, &SidebarMenu::libraryClicked,   this, &MainWindow::onNavigateToLibrary);
-    connect(sidebar, &SidebarMenu::favoritesClicked, this, &MainWindow::onNavigateToFavorites);
-    connect(sidebar, &SidebarMenu::settingsClicked,  this, &MainWindow::onNavigateToSettings);
-    connect(sidebar, &SidebarMenu::termsClicked,     this, &MainWindow::onNavigateToTerms);
-    connect(sidebar, &SidebarMenu::aboutClicked,     this, &MainWindow::onNavigateToAbout);
+    // FIX: termos volta à biblioteca, não à "sobre"
+    connect(termsScreen.get(),      &TermsScreen::backClicked,        this, &MainWindow::onNavigateToLibrary);
+
+    connect(sidebar, &SidebarMenu::libraryClicked,     this, &MainWindow::onNavigateToLibrary);
+    connect(sidebar, &SidebarMenu::favoritesClicked,   this, &MainWindow::onNavigateToFavorites);
+    connect(sidebar, &SidebarMenu::collectionsClicked, this, &MainWindow::onNavigateToCollections);
+    connect(sidebar, &SidebarMenu::settingsClicked,    this, &MainWindow::onNavigateToSettings);
+    connect(sidebar, &SidebarMenu::termsClicked,       this, &MainWindow::onNavigateToTerms);
+    connect(sidebar, &SidebarMenu::aboutClicked,       this, &MainWindow::onNavigateToAbout);
 }
 
 // ── Tema completo ─────────────────────────────────────────────────────────────
 
 void MainWindow::applyTheme()
 {
-    QColor menuColor = settingsManager->getMenuColor();
-    QColor bgColor   = settingsManager->getBgColor();
-    bool   night     = settingsManager->getNightMode();
-    bool   sepia     = settingsManager->getSepiaEnabled();
-    int    amber     = settingsManager->getAmberIntensity();
-    int    brightness= settingsManager->getBrightness();
+    QColor menuColor  = settingsManager->getMenuColor();
+    // FIX: bgColor é a cor de fundo do APP (cinza escuro por padrão, não a cor de janelas)
+    QColor bgColor    = settingsManager->getBgColor();      // cor do fundo externo (tela toda)
+    QColor winColor   = settingsManager->getWindowColor();  // cor das janelas/cards internas
+    bool   night      = settingsManager->getNightMode();
+    bool   sepia      = settingsManager->getSepiaEnabled();
+    int    amber      = settingsManager->getAmberIntensity();
+    int    brightness = settingsManager->getBrightness();
 
-    // FIX: cor de fundo real aplicada via setStyleSheet no centralWidget
-    QString bgCss = night ? "#0a0a0a" : bgColor.name();
-    centralWidget->setStyleSheet(QString("background:%1;").arg(bgCss));
+    // Cor de fundo do app (o que aparece "atrás" de tudo)
+    QString appBg = night ? "#080808" : bgColor.name();
+    centralWidget->setStyleSheet(QString("background:%1;").arg(appBg));
 
-    // Propagação de cor do menu
+    // Propaga cor do menu para todas as telas
     sidebar->applyMenuColor(menuColor);
     libraryScreen->setMenuColor(menuColor);
     readerScreen->setMenuColor(menuColor);
@@ -103,58 +109,54 @@ void MainWindow::applyTheme()
     aboutScreen->setMenuColor(menuColor);
     termsScreen->setMenuColor(menuColor);
 
-    // Modo noturno no leitor
+    // FIX: cor das janelas/cards internas (ex: grade da biblioteca)
+    libraryScreen->setWindowColor(winColor);
+    collectionScreen->setWindowColor(winColor);
+
+    // Modo noturno
     readerScreen->applyNightMode(night);
 
-    // Brilho: overlay escuro semitransparente sobre tudo (simulação sem acesso ao backlight)
-    // O RPi com X11 pode controlar brilho real via xrandr:
-    //   system("xrandr --output HDMI-1 --brightness 0.7");
-    // Aqui usamos overlay Qt como fallback universal.
+    // Filtros visuais: âmbar e sépia no leitor
+    readerScreen->setAmberIntensity(amber);
+    readerScreen->setSepiaEnabled(sepia);
+
+    // Brilho via overlay preto semitransparente
     if (!brightnessOverlay) {
         brightnessOverlay = new QWidget(this);
         brightnessOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
-        brightnessOverlay->setStyleSheet("background:black;");
     }
     brightnessOverlay->setGeometry(rect());
     if (brightness < 100) {
-        int alpha = qRound((100 - brightness) * 2.2); // 0–80% opacidade
-        brightnessOverlay->setStyleSheet(QString("background:rgba(0,0,0,%1);").arg(alpha));
+        int alpha = qBound(0, qRound((100 - brightness) * 2.2), 200);
+        brightnessOverlay->setStyleSheet(
+            QString("background:rgba(0,0,0,%1);").arg(alpha));
         brightnessOverlay->raise();
         brightnessOverlay->show();
     } else {
         brightnessOverlay->hide();
     }
-
-    // Sépia e âmbar são aplicados no ReaderScreen via PageWidget::paintEvent
-    // (passamos os valores ao abrir livro)
-    Q_UNUSED(sepia); Q_UNUSED(amber);
 }
 
-void MainWindow::onSettingsChanged()
-{
-    applyTheme();
-}
+void MainWindow::onSettingsChanged() { applyTheme(); }
 
 // ── Eventos ──────────────────────────────────────────────────────────────────
 
-bool MainWindow::event(QEvent* event)
+bool MainWindow::event(QEvent* ev)
 {
-    if (event->type() == QEvent::TouchBegin  ||
-        event->type() == QEvent::TouchUpdate ||
-        event->type() == QEvent::TouchEnd)
+    if (ev->type() == QEvent::TouchBegin  ||
+        ev->type() == QEvent::TouchUpdate ||
+        ev->type() == QEvent::TouchEnd)
     {
-        handleTouchEvent(static_cast<QTouchEvent*>(event));
+        handleTouchEvent(static_cast<QTouchEvent*>(ev));
         return true;
     }
-    return QMainWindow::event(event);
+    return QMainWindow::event(ev);
 }
 
-void MainWindow::handleTouchEvent(QTouchEvent* touchEvent)
+void MainWindow::handleTouchEvent(QTouchEvent* te)
 {
-    if (touchEvent->type() == QEvent::TouchBegin &&
-        touchEvent->touchPoints().size() == 1)
-    {
-        QPoint pos = touchEvent->touchPoints().first().pos().toPoint();
+    if (te->type() == QEvent::TouchBegin && te->touchPoints().size() == 1) {
+        QPoint pos = te->touchPoints().first().pos().toPoint();
         if (pos.x() < 50 && pos.y() < 50) toggleSidebar();
     }
 }
@@ -165,6 +167,12 @@ void MainWindow::toggleSidebar()
     if (sidebarOpen) sidebar->show(); else sidebar->hide();
 }
 
+void MainWindow::closeSidebar()
+{
+    sidebarOpen = false;
+    sidebar->hide();
+}
+
 // ── Navegação ────────────────────────────────────────────────────────────────
 
 void MainWindow::onMenuClicked() { toggleSidebar(); }
@@ -173,32 +181,39 @@ void MainWindow::onNavigateToLibrary()
 {
     screenStack->setCurrentWidget(libraryScreen.get());
     libraryScreen->showAllBooks();
-    sidebarOpen = false; sidebar->hide();
+    closeSidebar();
 }
 
 void MainWindow::onNavigateToFavorites()
 {
     screenStack->setCurrentWidget(libraryScreen.get());
-    libraryScreen->showFavorites();
-    sidebarOpen = false; sidebar->hide();
+    libraryScreen->showFavorites();   // FIX: navega para biblioteca em modo favoritos
+    closeSidebar();
+}
+
+void MainWindow::onNavigateToCollections()
+{
+    screenStack->setCurrentWidget(collectionScreen.get());
+    collectionScreen->refresh();
+    closeSidebar();
 }
 
 void MainWindow::onNavigateToSettings()
 {
     screenStack->setCurrentWidget(settingsScreen.get());
-    sidebarOpen = false; sidebar->hide();
+    closeSidebar();
 }
 
 void MainWindow::onNavigateToTerms()
 {
     screenStack->setCurrentWidget(termsScreen.get());
-    sidebarOpen = false; sidebar->hide();
+    closeSidebar();
 }
 
 void MainWindow::onNavigateToAbout()
 {
     screenStack->setCurrentWidget(aboutScreen.get());
-    sidebarOpen = false; sidebar->hide();
+    closeSidebar();
 }
 
 void MainWindow::onOpenBook(const QString& filePath)

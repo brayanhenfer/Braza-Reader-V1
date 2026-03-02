@@ -12,6 +12,7 @@ class ReaderScreen;
 class SettingsScreen;
 class AboutScreen;
 class TermsScreen;
+class CollectionScreen;
 class SettingsManager;
 
 class MainWindow : public QMainWindow
@@ -29,6 +30,7 @@ private slots:
     void onMenuClicked();
     void onNavigateToLibrary();
     void onNavigateToFavorites();
+    void onNavigateToCollections();   // NOVO
     void onNavigateToSettings();
     void onNavigateToTerms();
     void onNavigateToAbout();
@@ -42,20 +44,20 @@ private:
     void applyTheme();
     void toggleSidebar();
     void handleTouchEvent(QTouchEvent* touchEvent);
+    void closeSidebar();
 
     QWidget*         centralWidget;
     QStackedWidget*  screenStack;
     SidebarMenu*     sidebar;
-
-    // Overlay de brilho (widget semitransparente preto)
     QWidget*         brightnessOverlay = nullptr;
 
-    std::unique_ptr<LibraryScreen>   libraryScreen;
-    std::unique_ptr<ReaderScreen>    readerScreen;
-    std::unique_ptr<SettingsScreen>  settingsScreen;
-    std::unique_ptr<AboutScreen>     aboutScreen;
-    std::unique_ptr<TermsScreen>     termsScreen;
-    std::unique_ptr<SettingsManager> settingsManager;
+    std::unique_ptr<LibraryScreen>    libraryScreen;
+    std::unique_ptr<ReaderScreen>     readerScreen;
+    std::unique_ptr<SettingsScreen>   settingsScreen;
+    std::unique_ptr<AboutScreen>      aboutScreen;
+    std::unique_ptr<TermsScreen>      termsScreen;
+    std::unique_ptr<CollectionScreen> collectionScreen;  // NOVO: tela própria
+    std::unique_ptr<SettingsManager>  settingsManager;
 
-    bool sidebarOpen;
+    bool sidebarOpen = false;
 };

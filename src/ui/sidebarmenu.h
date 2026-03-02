@@ -19,8 +19,9 @@ public:
 signals:
     void libraryClicked();
     void favoritesClicked();
+    void collectionsClicked();   // NOVO
     void settingsClicked();
-    void termsClicked();     // NOVO: página de termos
+    void termsClicked();         // NOVO
     void aboutClicked();
 
 private:
@@ -28,10 +29,11 @@ private:
     QPushButton* createMenuButton(const QString& icon, const QString& text);
 
     QVBoxLayout* mainLayout;
-    QLabel*      headerLabel;
+    QLabel*      logoLabel;      // logo PNG ou texto
     QPushButton* libraryButton;
     QPushButton* favoritesButton;
+    QPushButton* collectionsButton; // NOVO
     QPushButton* settingsButton;
-    QPushButton* termsButton;    // NOVO
+    QPushButton* termsButton;
     QPushButton* aboutButton;
 };
