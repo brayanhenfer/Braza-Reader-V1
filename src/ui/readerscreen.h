@@ -10,39 +10,16 @@
 #include <QColor>
 #include <QTimer>
 #include <QPoint>
+#include <QRectF>
 #include <memory>
 
+#include "pagewidget.h"   // define PageWidget + TextWord + PageHighlight
+
 class PDFRenderer;
-class PDFCache;
+class PDFLoader;          // para TextExtractor via getContext()/getDocument()
 class ProgressManager;
 class AnnotationManager;
 
-// ─── Widget de página com filtros visuais ────────────────────────────────────
-class PageWidget : public QLabel
-{
-    Q_OBJECT
-public:
-    explicit PageWidget(QWidget* parent = nullptr);
-    void setPagePixmap(const QPixmap& px);
-    void setAmberIntensity(int intensity);
-    void setSepiaEnabled(bool enabled);
-
-signals:
-    void longPressed(const QPoint& pos);
-
-protected:
-    void paintEvent(QPaintEvent* e) override;
-    void mousePressEvent(QMouseEvent* e) override;
-    void mouseReleaseEvent(QMouseEvent* e) override;
-
-private:
-    QTimer pressTimer;
-    QPoint pressPos;
-    int    amberIntensity = 0;
-    bool   sepiaEnabled   = false;
-};
-
-// ─── Tela de leitura ─────────────────────────────────────────────────────────
 class ReaderScreen : public QWidget
 {
     Q_OBJECT
@@ -72,11 +49,12 @@ private slots:
     void onZoomIn();
     void onZoomOut();
     void onToggleAnnotationPanel();
-    void onAddHighlight(const QColor& color);
-    void onAddNote();
-    void onToggleBookmark();
     void onScrollDebounced();
+    void onToggleBookmark();
     void onShowAnnotationsList();
+    void onSelectionFinished(const QString& text,
+                              const QList<QRectF>& pageRects,
+                              int pageIndex);
 
 private:
     void setupUI();
@@ -88,45 +66,60 @@ private:
     void renderVisiblePages();
     void expandWindowForward();
     void expandWindowBackward();
+    void loadHighlightsForPage(PageWidget* pw, int pageIndex);
+    void reloadPageHighlights(int pageIndex);
+    void showAnnotationPanel();
+    void closeAnnotationPanel();
+    void openNoteDialog(int annotId,
+                        const QString&       selText,
+                        const QList<QRectF>& pageRects,
+                        int                  pageIndex,
+                        const QString&       existingNote);
     void updatePageInfo();
     void updateProgressBar();
     int  scrollPositionForPage(int localIndex) const;
 
-    // Layout
-    QVBoxLayout*       mainLayout;
-    QWidget*           topBar;
-    QPushButton*       backButton;
-    QLabel*            pageInfoLabel;
-    QPushButton*       annotBtn;
+    // ── Layout ──────────────────────────────────────────────────────────────
+    QVBoxLayout*       mainLayout   = nullptr;
+    QWidget*           topBar       = nullptr;
+    QPushButton*       backButton   = nullptr;
+    QLabel*            pageInfoLabel = nullptr;
+    QPushButton*       annotBtn     = nullptr;
 
-    QScrollArea*       scrollArea;
-    QWidget*           pagesContainer;
-    QVBoxLayout*       pagesLayout;
+    QScrollArea*       scrollArea      = nullptr;
+    QWidget*           pagesContainer  = nullptr;
+    QVBoxLayout*       pagesLayout     = nullptr;
     QList<PageWidget*> pageWidgets;
 
-    QWidget*           bottomBar;
-    QPushButton*       zoomInBtn;
-    QPushButton*       zoomOutBtn;
-    QPushButton*       bookmarkBtn;
-    QLabel*            progressLabel;
+    QWidget*           bottomBar    = nullptr;
+    QPushButton*       zoomInBtn    = nullptr;
+    QPushButton*       zoomOutBtn   = nullptr;
+    QPushButton*       bookmarkBtn  = nullptr;
+    QLabel*            progressLabel = nullptr;
 
-    QWidget*           annotationPanel;
-    QLabel*            highlightColorPreview;
-    QColor             currentHighlightColor;
+    // ── Painel de anotação flutuante ────────────────────────────────────────
+    QWidget*           annotationPanel  = nullptr;
+    QLabel*            selTextPreview   = nullptr;
+    QLabel*            hlColorPreview   = nullptr;
+    QColor             currentHighlightColor{255, 235, 59};
     bool               annotPanelVisible = false;
 
-    QTimer*            scrollDebounce;
+    // Seleção pendente em coords de PÁGINA (PDF pts)
+    QString            pendingSelText;
+    QList<QRectF>      pendingSelPageRects;
+    int                pendingSelPage = -1;
 
-    // Estado de toque (para detectar tap vs scroll)
+    QTimer*            scrollDebounce = nullptr;
     QPoint             tapStartPos;
     bool               tapMoved = false;
 
-    // Engine
+    // ── Engine ──────────────────────────────────────────────────────────────
     std::unique_ptr<PDFRenderer>       renderer;
-    std::unique_ptr<PDFCache>          cache;
+    // PDFLoader exposto pelo renderer via amigo — acessamos via getter no .cpp
     std::unique_ptr<ProgressManager>   progressManager;
     std::unique_ptr<AnnotationManager> annotManager;
 
+    // ── Estado ──────────────────────────────────────────────────────────────
     QString currentFilePath;
     QString currentTitle;
     int     currentPage    = 0;
@@ -134,10 +127,9 @@ private:
     float   zoomFactor     = 1.0f;
     bool    bookOpen       = false;
     bool    topBarVisible  = true;
-    bool    nightMode      = false;
     int     amberIntensity = 0;
     bool    sepiaEnabled   = false;
 
-    int windowStart = 0;
+    int  windowStart = 0;
     static constexpr int MAX_LOADED = 4;
 };

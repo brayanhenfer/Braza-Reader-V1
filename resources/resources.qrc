@@ -1,5 +1,6 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<RCC>
-    <qresource>
-    </qresource>
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource prefix="/">
+    <file alias="logo.png">logo.png</file>
+  </qresource>
 </RCC>

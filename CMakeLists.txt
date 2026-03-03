@@ -155,6 +155,8 @@ set(UI_SOURCES
     src/ui/collectionscreen.h
     src/ui/collectionscreen.cpp
     src/ui/topbar_helper.h
+    src/ui/pagewidget.h
+    src/ui/pagewidget.cpp
 
 )
 
@@ -168,6 +170,8 @@ set(ENGINE_SOURCES
     src/engine/pdfrenderer.cpp
     src/engine/pdfcache.h
     src/engine/pdfcache.cpp
+    src/engine/textextractor.h
+    src/engine/textextractor.cpp
 )
 
 # ==============================================================================

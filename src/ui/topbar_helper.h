@@ -1,6 +1,8 @@
 #pragma once
-// Helper estático: cria a topbar padrão com logo PNG centralizada.
-// Inclua este header em cada tela e chame TopBarHelper::create(...).
+// Helper: cria topbar padrão com logo centralizada (carrega de :/logo.png)
+// Adicione ao CMakeLists.txt: target_sources(... resources.qrc)
+//                            set_property(TARGET ... APPEND PROPERTY AUTORCC_OPTIONS ...)
+// E ao resources.qrc: <file alias="logo.png">resources/logo.png</file>
 
 #include <QWidget>
 #include <QHBoxLayout>
@@ -11,10 +13,6 @@
 
 namespace TopBarHelper {
 
-// Cria uma topbar padrão.
-// leftWidget  = botão esquerdo (menu ou voltar), pode ser nullptr
-// rightWidget = botão direito (opcional), pode ser nullptr
-// Retorna o QWidget* da topbar (height=50, parentada em parent)
 inline QWidget* create(QWidget* parent,
                         QPushButton* leftBtn,
                         QPushButton* rightBtn = nullptr,
@@ -22,7 +20,7 @@ inline QWidget* create(QWidget* parent,
 {
     QWidget* bar = new QWidget(parent);
     bar->setFixedHeight(50);
-    bar->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+    bar->setStyleSheet(QString("background-color:%1;").arg(color.name()));
 
     QHBoxLayout* lay = new QHBoxLayout(bar);
     lay->setContentsMargins(8, 4, 8, 4);
@@ -33,15 +31,16 @@ inline QWidget* create(QWidget* parent,
         lay->addWidget(leftBtn);
     }
 
-    // Logo centralizada — PNG ou texto fallback
+    // Logo centralizada
     QLabel* logo = new QLabel(bar);
     logo->setAlignment(Qt::AlignCenter);
     QPixmap px(":/logo.png");
     if (!px.isNull()) {
-        logo->setPixmap(px.scaled(120, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        // Escala mantendo aspecto dentro de 160×38px (cabeça na topbar de 50px)
+        logo->setPixmap(px.scaled(160, 38, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     } else {
         logo->setText("BrazaReader");
-        logo->setStyleSheet("color: white; font-size: 16px; font-weight: bold;");
+        logo->setStyleSheet("color:white;font-size:16px;font-weight:bold;");
     }
     lay->addWidget(logo, 1);
 
@@ -53,11 +52,10 @@ inline QWidget* create(QWidget* parent,
     return bar;
 }
 
-// Atualiza a cor de fundo de uma topbar já criada
 inline void setColor(QWidget* bar, const QColor& color)
 {
     if (bar)
-        bar->setStyleSheet(QString("background-color: %1;").arg(color.name()));
+        bar->setStyleSheet(QString("background-color:%1;").arg(color.name()));
 }
 
 } // namespace TopBarHelper
