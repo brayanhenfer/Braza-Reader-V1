@@ -9,16 +9,14 @@
 #include <QPixmap>
 #include <QString>
 
-// ── TextWord ─────────────────────────────────────────────────────────────────
-// Definido aqui para evitar dependência de headers externos.
-// Preenchido por TextExtractor::extractWords() em readerscreen.cpp.
+// ── TextWord ──────────────────────────────────────────────────────────────────
 struct TextWord {
-    QRectF  bbox;   // coordenadas em pontos PDF
+    QRectF  bbox;
     QString word;
 };
 
 // ── PageHighlight ─────────────────────────────────────────────────────────────
-// Rects em coordenadas de PÁGINA (PDF pts) — convertidos para widget em paintEvent.
+// pageRects em coordenadas de PÁGINA (pontos PDF) — convertidos em paintEvent.
 struct PageHighlight {
     QList<QRectF> pageRects;
     QColor        color;
@@ -26,10 +24,6 @@ struct PageHighlight {
 };
 
 // ── PageWidget ────────────────────────────────────────────────────────────────
-// QLabel estendido com:
-//   - grifos persistentes coloridos (coordenadas de página)
-//   - seleção de texto por arrastar o dedo
-//   - filtros âmbar e sépia
 class PageWidget : public QLabel
 {
     Q_OBJECT
@@ -41,12 +35,10 @@ public:
     void setSepiaEnabled(bool e);
     void setHighlights(const QList<PageHighlight>& hl);
     void setPageWords(const QList<TextWord>& words);
-
-    // Escala: pixels_renderizados / pontos_pdf  (calculada externamente)
     void setRenderScale(float sx, float sy);
 
     QString        selectedText()      const;
-    QList<QRectF>  selectedPageRects() const;  // em coords de página (PDF pts)
+    QList<QRectF>  selectedPageRects() const;
 
 signals:
     void selectionFinished(const QString& text, const QList<QRectF>& pageRects);
@@ -60,6 +52,7 @@ protected:
 private:
     QPoint pixmapOffset() const;
     QRectF pageToWidget(const QRectF& r) const;
+    QRectF widgetToPage(const QRectF& r) const;
 
     QTimer pressTimer;
     QPoint pressPos;
