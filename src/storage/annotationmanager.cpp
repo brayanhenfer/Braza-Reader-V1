@@ -1,6 +1,7 @@
 #include "annotationmanager.h"
 #include <QStandardPaths>
 #include <QDir>
+#include <QLocale>
 
 AnnotationManager::AnnotationManager() { initializeDatabase(); }
 AnnotationManager::~AnnotationManager() { if (database) sqlite3_close(database); }
@@ -43,15 +44,20 @@ void AnnotationManager::createTableIfNeeded()
     if (err) sqlite3_free(err);
 }
 
-// ── Serialização ──────────────────────────────────────────────────────────────
+// ── Serialização — SEMPRE usa locale C (ponto como decimal) ──────────────────
+// CRÍTICO: em pt_BR o separador decimal é vírgula. Usar QString::arg(double)
+// produziria "1,2345" em vez de "1.2345", quebrando o split por vírgula.
 
 QString AnnotationManager::rectsToString(const QList<QRectF>& rects)
 {
+    QLocale c = QLocale::c();
     QStringList parts;
     for (const QRectF& r : rects)
-        parts << QString("%1,%2,%3,%4")
-                 .arg(r.x(), 0, 'f', 4).arg(r.y(), 0, 'f', 4)
-                 .arg(r.width(), 0, 'f', 4).arg(r.height(), 0, 'f', 4);
+        parts << QString("%1|%2|%3|%4")
+                 .arg(c.toString(r.x(),      'f', 4))
+                 .arg(c.toString(r.y(),      'f', 4))
+                 .arg(c.toString(r.width(),  'f', 4))
+                 .arg(c.toString(r.height(), 'f', 4));
     return parts.join(';');
 }
 
@@ -59,11 +65,18 @@ QList<QRectF> AnnotationManager::stringToRects(const QString& s)
 {
     QList<QRectF> out;
     if (s.trimmed().isEmpty()) return out;
+    QLocale c = QLocale::c();
     for (const QString& part : s.split(';')) {
-        const QStringList p = part.split(',');
-        if (p.size() == 4)
-            out.append(QRectF(p[0].toDouble(), p[1].toDouble(),
-                              p[2].toDouble(), p[3].toDouble()));
+        const QStringList p = part.split('|');
+        if (p.size() == 4) {
+            bool ok1, ok2, ok3, ok4;
+            double x = c.toDouble(p[0], &ok1);
+            double y = c.toDouble(p[1], &ok2);
+            double w = c.toDouble(p[2], &ok3);
+            double h = c.toDouble(p[3], &ok4);
+            if (ok1 && ok2 && ok3 && ok4)
+                out.append(QRectF(x, y, w, h));
+        }
     }
     return out;
 }

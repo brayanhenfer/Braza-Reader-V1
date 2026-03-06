@@ -6,8 +6,6 @@ PageWidget::PageWidget(QWidget* parent) : QLabel(parent)
 {
     setAlignment(Qt::AlignCenter);
     setMouseTracking(true);
-    pressTimer.setSingleShot(true);
-    pressTimer.setInterval(500);
 }
 
 void PageWidget::setPagePixmap(const QPixmap& px)  { setPixmap(px); update(); }
@@ -17,17 +15,12 @@ void PageWidget::setHighlights(const QList<PageHighlight>& hl) { highlights = hl
 void PageWidget::setPageWords(const QList<TextWord>& w) { pageWords = w; }
 void PageWidget::setRenderScale(float sx, float sy) { scaleX = sx; scaleY = sy; }
 
-// PageWidget usa setFixedSize(scaled.size()), portanto pixmap ocupa tudo.
-// Offset é sempre (0,0). Mantemos o método por segurança.
-QPoint PageWidget::pixmapOffset() const { return QPoint(0, 0); }
-
 QRectF PageWidget::pageToWidget(const QRectF& r) const
 {
     return QRectF(r.x() * scaleX, r.y() * scaleY,
                   r.width() * scaleX, r.height() * scaleY);
 }
 
-// Converte coords de widget para página
 QRectF PageWidget::widgetToPage(const QRectF& r) const
 {
     if (scaleX <= 0 || scaleY <= 0) return r;
@@ -46,28 +39,28 @@ void PageWidget::paintEvent(QPaintEvent* e)
     // 1. Highlights persistentes
     for (const PageHighlight& hl : highlights) {
         QColor c = hl.color;
-        c.setAlpha(100);
+        c.setAlpha(110);
         p.setBrush(c);
         p.setPen(Qt::NoPen);
         for (const QRectF& r : hl.pageRects)
             p.drawRect(pageToWidget(r));
     }
 
-    // 2a. Seleção por palavras (quando há extração de texto)
+    // 2a. Seleção por palavras (extração de texto disponível)
     if (hasSel && selStart >= 0 && selEnd >= 0 && !pageWords.isEmpty()) {
-        p.setBrush(QColor(100, 149, 237, 100));
-        p.setPen(QPen(QColor(60, 100, 220, 160), 1));
+        p.setBrush(QColor(80, 130, 220, 100));
+        p.setPen(QPen(QColor(60, 100, 200, 180), 1));
         const int from = qMin(selStart, selEnd);
         const int to   = qMax(selStart, selEnd);
         for (int i = from; i <= to && i < pageWords.size(); i++)
             p.drawRect(pageToWidget(pageWords[i].bbox));
     }
 
-    // 2b. Seleção rubber-band (quando NÃO há extração de texto)
+    // 2b. Rubber-band (sem extração de texto)
     if (hasSel && pageWords.isEmpty() && isDragging) {
-        QRect rr = QRect(pressPos, dragPos).normalized();
-        p.setBrush(QColor(100, 149, 237, 70));
-        p.setPen(QPen(QColor(60, 100, 220, 220), 2, Qt::DashLine));
+        const QRect rr = QRect(pressPos, dragPos).normalized();
+        p.setBrush(QColor(80, 130, 220, 60));
+        p.setPen(QPen(QColor(60, 100, 200, 220), 2, Qt::DashLine));
         p.drawRect(rr);
     }
 
@@ -90,8 +83,7 @@ void PageWidget::paintEvent(QPaintEvent* e)
 
 static int nearestWordIdx(const QList<TextWord>& words, const QPoint& pt, float sx, float sy)
 {
-    int    best = -1;
-    double bestD = 1e9;
+    int best = -1; double bestD = 1e9;
     for (int i = 0; i < words.size(); i++) {
         const QRectF wr(words[i].bbox.x() * sx, words[i].bbox.y() * sy,
                         words[i].bbox.width() * sx, words[i].bbox.height() * sy);
@@ -111,22 +103,16 @@ void PageWidget::mousePressEvent(QMouseEvent* e)
     isDragging = false;
     hasSel     = false;
     selStart   = selEnd = -1;
-    pressTimer.start();
     update();
 }
 
 void PageWidget::mouseMoveEvent(QMouseEvent* e)
 {
     if (!(e->buttons() & Qt::LeftButton)) return;
-
-    if ((e->pos() - pressPos).manhattanLength() > 8) {
-        pressTimer.stop();
-        isDragging = true;
-    }
+    if ((e->pos() - pressPos).manhattanLength() > 10) isDragging = true;
 
     if (isDragging) {
         dragPos = e->pos();
-
         if (!pageWords.isEmpty()) {
             selStart = nearestWordIdx(pageWords, pressPos, scaleX, scaleY);
             selEnd   = nearestWordIdx(pageWords, dragPos,  scaleX, scaleY);
@@ -138,18 +124,22 @@ void PageWidget::mouseMoveEvent(QMouseEvent* e)
 
 void PageWidget::mouseReleaseEvent(QMouseEvent*)
 {
-    pressTimer.stop();
     const bool wasDragging = isDragging;
     isDragging = false;
 
-    if (wasDragging && hasSel) {
+    if (!wasDragging) {
+        // ── Tap simples: toggle topbar/bottombar ──────────────────────────
+        hasSel = false; selStart = selEnd = -1; update();
+        emit pageTapped();
+        return;
+    }
 
+    if (hasSel) {
         if (!pageWords.isEmpty()) {
             // ── Seleção por palavras ──────────────────────────────────────
             const int from = qMin(selStart, selEnd);
             const int to   = qMax(selStart, selEnd);
-            QString       text;
-            QList<QRectF> pageRects;
+            QString text; QList<QRectF> pageRects;
             for (int i = from; i <= to && i < pageWords.size(); i++) {
                 if (!text.isEmpty()) text += ' ';
                 text += pageWords[i].word;
@@ -160,14 +150,12 @@ void PageWidget::mouseReleaseEvent(QMouseEvent*)
                 emit selectionFinished(text.trimmed(), pageRects);
 
         } else {
-            // ── Rubber-band: converte rect de widget → página ─────────────
-            const QRect  widgetRect = QRect(pressPos, dragPos).normalized();
-            if (widgetRect.width() > 10 && widgetRect.height() > 5) {
-                const QRectF pageRect = widgetToPage(QRectF(widgetRect));
-                hasSel = false; update();
-                emit selectionFinished("[grifo manual]", { pageRect });
-            } else {
-                hasSel = false; update();
+            // ── Rubber-band: rect em coords de página ─────────────────────
+            const QRect wr = QRect(pressPos, dragPos).normalized();
+            hasSel = false; update();
+            if (wr.width() > 8 && wr.height() > 4) {
+                const QRectF pr = widgetToPage(QRectF(wr));
+                emit selectionFinished(QString(), QList<QRectF>{ pr });
             }
         }
     } else {

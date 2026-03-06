@@ -9,21 +9,19 @@
 #include <QScrollBar>
 #include <QColor>
 #include <QTimer>
-#include <QPoint>
 #include <QRectF>
 #include <memory>
 
-#include "pagewidget.h"   // define PageWidget + TextWord + PageHighlight
+#include "pagewidget.h"
 
 class PDFRenderer;
-class PDFLoader;          // para TextExtractor via getContext()/getDocument()
+class PDFLoader;
 class ProgressManager;
 class AnnotationManager;
 
 class ReaderScreen : public QWidget
 {
     Q_OBJECT
-
 public:
     explicit ReaderScreen(QWidget* parent = nullptr);
     ~ReaderScreen();
@@ -41,7 +39,6 @@ signals:
 protected:
     void keyPressEvent(QKeyEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
-    bool eventFilter(QObject* obj, QEvent* ev) override;
 
 private slots:
     void onPreviousPage();
@@ -52,6 +49,7 @@ private slots:
     void onScrollDebounced();
     void onToggleBookmark();
     void onShowAnnotationsList();
+    void onPageTapped();   // FIX: recebe sinal de tap do PageWidget
     void onSelectionFinished(const QString& text,
                               const QList<QRectF>& pageRects,
                               int pageIndex);
@@ -70,56 +68,47 @@ private:
     void reloadPageHighlights(int pageIndex);
     void showAnnotationPanel();
     void closeAnnotationPanel();
-    void openNoteDialog(int annotId,
-                        const QString&       selText,
-                        const QList<QRectF>& pageRects,
-                        int                  pageIndex,
-                        const QString&       existingNote);
+    void openNoteDialog(int annotId, const QString& selText,
+                        const QList<QRectF>& pageRects, int pageIndex,
+                        const QString& existingNote);
     void updatePageInfo();
     void updateProgressBar();
     int  scrollPositionForPage(int localIndex) const;
 
-    // ── Layout ──────────────────────────────────────────────────────────────
-    QVBoxLayout*       mainLayout   = nullptr;
-    QWidget*           topBar       = nullptr;
-    QPushButton*       backButton   = nullptr;
-    QLabel*            pageInfoLabel = nullptr;
-    QPushButton*       annotBtn     = nullptr;
+    // Layout
+    QVBoxLayout*       mainLayout      = nullptr;
+    QWidget*           topBar          = nullptr;
+    QPushButton*       backButton      = nullptr;
+    QLabel*            pageInfoLabel   = nullptr;
+    QPushButton*       annotBtn        = nullptr;
 
     QScrollArea*       scrollArea      = nullptr;
     QWidget*           pagesContainer  = nullptr;
     QVBoxLayout*       pagesLayout     = nullptr;
     QList<PageWidget*> pageWidgets;
 
-    QWidget*           bottomBar    = nullptr;
-    QPushButton*       zoomInBtn    = nullptr;
-    QPushButton*       zoomOutBtn   = nullptr;
-    QPushButton*       bookmarkBtn  = nullptr;
-    QLabel*            progressLabel = nullptr;
+    QWidget*           bottomBar       = nullptr;
+    QPushButton*       zoomInBtn       = nullptr;
+    QPushButton*       zoomOutBtn      = nullptr;
+    QPushButton*       bookmarkBtn     = nullptr;
+    QLabel*            progressLabel   = nullptr;
 
-    // ── Painel de anotação flutuante ────────────────────────────────────────
-    QWidget*           annotationPanel  = nullptr;
-    QLabel*            selTextPreview   = nullptr;
-    QLabel*            hlColorPreview   = nullptr;
+    QWidget*           annotationPanel = nullptr;
+    QLabel*            selTextPreview  = nullptr;
+    QLabel*            hlColorPreview  = nullptr;
     QColor             currentHighlightColor{255, 235, 59};
     bool               annotPanelVisible = false;
 
-    // Seleção pendente em coords de PÁGINA (PDF pts)
     QString            pendingSelText;
     QList<QRectF>      pendingSelPageRects;
     int                pendingSelPage = -1;
 
     QTimer*            scrollDebounce = nullptr;
-    QPoint             tapStartPos;
-    bool               tapMoved = false;
 
-    // ── Engine ──────────────────────────────────────────────────────────────
     std::unique_ptr<PDFRenderer>       renderer;
-    // PDFLoader exposto pelo renderer via amigo — acessamos via getter no .cpp
     std::unique_ptr<ProgressManager>   progressManager;
     std::unique_ptr<AnnotationManager> annotManager;
 
-    // ── Estado ──────────────────────────────────────────────────────────────
     QString currentFilePath;
     QString currentTitle;
     int     currentPage    = 0;

@@ -8,7 +8,6 @@
 class SidebarMenu : public QWidget
 {
     Q_OBJECT
-
 public:
     explicit SidebarMenu(QWidget* parent = nullptr);
     ~SidebarMenu();
@@ -23,14 +22,17 @@ signals:
 
 private:
     void setupUI();
-    QPushButton* createMenuButton(const QString& icon, const QString& text);
+
+    // Cria botão com ícone desenhado via QPixmap (não usa emoji)
+    QPushButton* makeButton(const QPixmap& icon, const QString& text);
+
+    // Ícones desenhados com QPainter — garantem renderização em qualquer distro
+    static QPixmap iconBooks(int n);        // n livros verticais
+    static QPixmap iconGear();              // engrenagem simples
+    static QPixmap iconPage();              // folha com linhas
+    static QPixmap iconStar();              // estrela
+    static QPixmap iconInfo();              // letra "i" em círculo
 
     QVBoxLayout*  mainLayout;
     QLabel*       headerLabel;
-    QPushButton*  libraryButton;
-    QPushButton*  favoritesButton;
-    QPushButton*  collectionsButton;
-    QPushButton*  settingsButton;
-    QPushButton*  termsButton;
-    QPushButton*  aboutButton;
 };

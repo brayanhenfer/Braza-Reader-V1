@@ -38,7 +38,7 @@ inline QWidget* create(QWidget* parent,
     logo->setAlignment(Qt::AlignCenter);
     QPixmap px(":/logo.png");
     if (!px.isNull()) {
-        logo->setPixmap(px.scaled(148, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        logo->setPixmap(px.scaled(200, 42, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     } else {
         logo->setText("BrazaReader");
         logo->setStyleSheet("color:white;font-size:16px;font-weight:bold;");

@@ -10,11 +10,12 @@ class LibraryScreen;
 class ReaderScreen;
 class SettingsScreen;
 class AboutScreen;
+class CollectionScreen;
+class TermsScreen;
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
-
 public:
     MainWindow(QWidget* parent = nullptr);
     ~MainWindow();
@@ -44,10 +45,12 @@ private:
     QStackedWidget* screenStack;
     SidebarMenu*    sidebar;
 
-    std::unique_ptr<LibraryScreen>  libraryScreen;
-    std::unique_ptr<ReaderScreen>   readerScreen;
-    std::unique_ptr<SettingsScreen> settingsScreen;
-    std::unique_ptr<AboutScreen>    aboutScreen;
+    std::unique_ptr<LibraryScreen>    libraryScreen;
+    std::unique_ptr<ReaderScreen>     readerScreen;
+    std::unique_ptr<SettingsScreen>   settingsScreen;
+    std::unique_ptr<AboutScreen>      aboutScreen;
+    std::unique_ptr<CollectionScreen> collectionScreen;
+    std::unique_ptr<TermsScreen>      termsScreen;
 
-    bool sidebarOpen;
+    bool sidebarOpen = false;
 };

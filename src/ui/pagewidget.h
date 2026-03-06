@@ -9,21 +9,17 @@
 #include <QPixmap>
 #include <QString>
 
-// ── TextWord ──────────────────────────────────────────────────────────────────
 struct TextWord {
     QRectF  bbox;
     QString word;
 };
 
-// ── PageHighlight ─────────────────────────────────────────────────────────────
-// pageRects em coordenadas de PÁGINA (pontos PDF) — convertidos em paintEvent.
 struct PageHighlight {
-    QList<QRectF> pageRects;
+    QList<QRectF> pageRects;   // coords de PÁGINA (PDF pts)
     QColor        color;
     int           annotationId = -1;
 };
 
-// ── PageWidget ────────────────────────────────────────────────────────────────
 class PageWidget : public QLabel
 {
     Q_OBJECT
@@ -41,7 +37,10 @@ public:
     QList<QRectF>  selectedPageRects() const;
 
 signals:
+    // Emitido quando o usuário termina uma seleção por arrastar
     void selectionFinished(const QString& text, const QList<QRectF>& pageRects);
+    // Emitido em tap simples (sem arrastar) — usado para toggle da topbar
+    void pageTapped();
 
 protected:
     void paintEvent(QPaintEvent* e) override;
@@ -50,11 +49,9 @@ protected:
     void mouseReleaseEvent(QMouseEvent* e) override;
 
 private:
-    QPoint pixmapOffset() const;
     QRectF pageToWidget(const QRectF& r) const;
     QRectF widgetToPage(const QRectF& r) const;
 
-    QTimer pressTimer;
     QPoint pressPos;
     QPoint dragPos;
     bool   isDragging    = false;

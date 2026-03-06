@@ -1,60 +1,84 @@
 #include "termsscreen.h"
 #include "topbar_helper.h"
-#include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScrollArea>
-#include <QTextBrowser>
+#include <QTextEdit>
 
 TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) { setupUI(); }
 TermsScreen::~TermsScreen() = default;
 
 void TermsScreen::setupUI()
 {
-    QVBoxLayout* lay = new QVBoxLayout(this);
-    lay->setContentsMargins(0, 0, 0, 0);
-    lay->setSpacing(0);
+    QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
 
-    backButton = new QPushButton("←");
-    backButton->setFixedSize(40, 40);
-    backButton->setStyleSheet(
-        "QPushButton{background:transparent;color:white;font-size:22px;border:none;}"
+    // Topbar
+    QPushButton* menuBtn = new QPushButton(QString::fromUtf8("☰"), this);
+    menuBtn->setFixedSize(40, 40);
+    menuBtn->setStyleSheet(
+        "QPushButton{background:transparent;color:white;font-size:24px;border:none;}"
         "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
-    // FIX: backClicked → MainWindow::onNavigateToLibrary (não onNavigateToAbout)
-    connect(backButton, &QPushButton::clicked, this, &TermsScreen::backClicked);
+    connect(menuBtn, &QPushButton::clicked, this, &TermsScreen::menuClicked);
 
-    topBar = TopBarHelper::create(this, backButton);
-    lay->addWidget(topBar);
+    QWidget* topBar = TopBarHelper::create(this, menuBtn);
+    mainLayout->addWidget(topBar);
 
-    QTextBrowser* text = new QTextBrowser(this);
-    text->setStyleSheet(
-        "QTextBrowser{background:#2b2b2b;color:#ddd;border:none;"
-        "font-size:13px;padding:20px;}");
-    text->setHtml(R"(
-<h2 style='color:#4CAF50;'>Termos de Uso — BrazaReader</h2>
-<p>Ao utilizar este software, você concorda com os termos abaixo.</p>
-<h3 style='color:#aaa;'>1. Uso Pessoal</h3>
-<p>O BrazaReader destina-se exclusivamente ao uso pessoal e não comercial.
-   É proibida a redistribuição sem autorização expressa do desenvolvedor.</p>
-<h3 style='color:#aaa;'>2. Arquivos PDF</h3>
-<p>O aplicativo acessa apenas PDFs que você fornecer. Nenhum arquivo é
-   transmitido para servidores externos. Todos os dados ficam localmente
-   no dispositivo.</p>
-<h3 style='color:#aaa;'>3. Privacidade</h3>
-<p>O BrazaReader não coleta, armazena nem transmite dados pessoais.
-   Progressos de leitura, favoritos e anotações são salvos apenas
-   localmente no banco de dados SQLite do dispositivo.</p>
-<h3 style='color:#aaa;'>4. Responsabilidade</h3>
-<p>O desenvolvedor não se responsabiliza por danos causados pelo uso
-   indevido do software ou por conteúdo dos PDFs lidos.</p>
-<h3 style='color:#aaa;'>5. Atualizações</h3>
-<p>Estes termos podem ser atualizados sem aviso prévio. Recomenda-se
-   verificar esta seção periodicamente.</p>
-<p style='color:#666; margin-top:30px;'>BrazaReader v1.0.0 — 2026</p>
-)");
-    lay->addWidget(text, 1);
-}
+    // Conteúdo com scroll
+    QScrollArea* scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setStyleSheet("QScrollArea{border:none;background:#2b2b2b;}");
 
-void TermsScreen::setMenuColor(const QColor& color)
-{
-    TopBarHelper::setColor(topBar, color);
+    QWidget* content = new QWidget();
+    content->setStyleSheet("background:#2b2b2b;");
+    QVBoxLayout* cl = new QVBoxLayout(content);
+    cl->setContentsMargins(30, 24, 30, 24);
+    cl->setSpacing(16);
+
+    auto makeTitle = [&](const QString& t) {
+        QLabel* l = new QLabel(t, content);
+        l->setStyleSheet("color:white;font-size:17px;font-weight:bold;");
+        l->setWordWrap(true);
+        cl->addWidget(l);
+    };
+
+    auto makeText = [&](const QString& t) {
+        QLabel* l = new QLabel(t, content);
+        l->setStyleSheet("color:#bbb;font-size:13px;line-height:1.6;");
+        l->setWordWrap(true);
+        cl->addWidget(l);
+    };
+
+    makeTitle("Termos de Uso — BrazaReader");
+    makeText("Última atualização: 2025");
+
+    makeTitle("1. Aceitação dos Termos");
+    makeText("Ao utilizar o BrazaReader, você concorda com estes Termos de Uso. "
+             "Se não concordar com qualquer parte, não utilize o aplicativo.");
+
+    makeTitle("2. Uso do Aplicativo");
+    makeText("O BrazaReader é um leitor de PDF pessoal. Você é responsável pelo conteúdo "
+             "dos arquivos que abre. Não distribua arquivos protegidos por direitos autorais "
+             "sem autorização do titular.");
+
+    makeTitle("3. Dados e Privacidade");
+    makeText("O BrazaReader armazena dados localmente em seu dispositivo: "
+             "progresso de leitura, anotações, favoritos e configurações. "
+             "Nenhum dado é enviado a servidores externos.");
+
+    makeTitle("4. Propriedade Intelectual");
+    makeText("O código-fonte, design e marca BrazaReader são propriedade de seus criadores. "
+             "É vedada a reprodução, distribuição ou modificação sem autorização expressa.");
+
+    makeTitle("5. Limitação de Responsabilidade");
+    makeText("O aplicativo é fornecido 'como está', sem garantias de qualquer tipo. "
+             "Os criadores não se responsabilizam por perda de dados ou danos decorrentes do uso.");
+
+    makeTitle("6. Alterações");
+    makeText("Estes termos podem ser atualizados a qualquer momento. "
+             "O uso continuado do aplicativo após alterações implica aceitação dos novos termos.");
+
+    cl->addStretch();
+    scroll->setWidget(content);
+    mainLayout->addWidget(scroll, 1);
 }
