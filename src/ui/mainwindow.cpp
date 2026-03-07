@@ -55,7 +55,9 @@ void MainWindow::connectSignals(){
     connect(readerScreen.get(),     &ReaderScreen::backClicked,     this, &MainWindow::onCloseReader);
     connect(settingsScreen.get(),   &SettingsScreen::menuClicked,   this, &MainWindow::onMenuClicked);
     connect(aboutScreen.get(),      &AboutScreen::menuClicked,      this, &MainWindow::onMenuClicked);
-    connect(collectionScreen.get(), &CollectionScreen::menuClicked, this, &MainWindow::onMenuClicked);
+    connect(collectionScreen.get(), &CollectionScreen::menuClicked,  this, &MainWindow::onMenuClicked);
+    connect(collectionScreen.get(), &CollectionScreen::backClicked,  this, &MainWindow::onNavigateToLibrary);
+    connect(collectionScreen.get(), &CollectionScreen::bookOpened,   this, &MainWindow::onOpenBook);
     connect(termsScreen.get(),      &TermsScreen::menuClicked,      this, &MainWindow::onMenuClicked);
     connect(sidebar, &SidebarMenu::libraryClicked,     this, &MainWindow::onNavigateToLibrary);
     connect(sidebar, &SidebarMenu::favoritesClicked,   this, &MainWindow::onNavigateToFavorites);

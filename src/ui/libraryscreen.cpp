@@ -165,24 +165,30 @@ void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
     titleLbl->setWordWrap(true);
     titleLbl->setMaximumHeight(28);
 
-    // Barra de progresso
+    // Barra de progresso — visual melhorado
     QWidget* progressRow = new QWidget(card);
     QHBoxLayout* progressLay = new QHBoxLayout(progressRow);
-    progressLay->setContentsMargins(0,0,0,0);
-    progressLay->setSpacing(4);
+    progressLay->setContentsMargins(0,2,0,2);
+    progressLay->setSpacing(6);
     QProgressBar* progressBar = new QProgressBar(progressRow);
     progressBar->setRange(0, 100);
     progressBar->setValue(progressPercent);
-    progressBar->setFixedHeight(6);
+    progressBar->setFixedHeight(8);
     progressBar->setTextVisible(false);
-    progressBar->setStyleSheet(
-        "QProgressBar { background:#555; border-radius:3px; border:none; }"
-        "QProgressBar::chunk { background:#4CAF50; border-radius:3px; }");
+    // Cor da barra baseada no progresso
+    QString barColor = progressPercent == 0   ? "#555" :
+                       progressPercent < 30   ? "#e67e22" :
+                       progressPercent < 70   ? "#f1c40f" :
+                                                "#2ecc71";
+    progressBar->setStyleSheet(QString(
+        "QProgressBar{background:#333;border-radius:4px;border:none;}"
+        "QProgressBar::chunk{background:%1;border-radius:4px;}").arg(barColor));
     QLabel* progressLbl = new QLabel(
         progressPercent > 0 ? QString("%1%").arg(progressPercent) : QString::fromUtf8("—"),
         progressRow);
-    progressLbl->setStyleSheet("color:#7aaa7a; font-size:10px;");
-    progressLbl->setFixedWidth(28);
+    progressLbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:bold;").arg(
+        progressPercent == 0 ? "#666" : barColor));
+    progressLbl->setFixedWidth(30);
     progressLbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     progressLay->addWidget(progressBar, 1);
     progressLay->addWidget(progressLbl);
@@ -287,7 +293,7 @@ void LibraryScreen::onAddToCollection(const QString& bookTitle)
     auto* dlg = new QDialog(this);
     dlg->setWindowTitle("Adicionar à Coleção");
     dlg->setStyleSheet("background:#1a1a1a; color:white;");
-    dlg->resize(360, 360);
+    dlg->resize(360, 380);
 
     auto* lay = new QVBoxLayout(dlg);
     lay->setSpacing(10);
@@ -302,24 +308,25 @@ void LibraryScreen::onAddToCollection(const QString& bookTitle)
     // Lista de coleções existentes
     auto* list = new QListWidget(dlg);
     list->setStyleSheet(
-        "QListWidget{background:#2b2b2b;color:white;border:1px solid #444;font-size:14px;}"
+        "QListWidget{background:#2b2b2b;color:white;border:1px solid #444;"
+        "font-size:14px;border-radius:6px;}"
         "QListWidget::item{padding:12px;}"
         "QListWidget::item:selected{background:#1e5c28;}");
     lay->addWidget(list, 1);
 
-    // Função local para recarregar a lista
+    // Recarregar lista usando IDs
     auto fillList = [&]() {
         list->clear();
-        const QStringList cols = collectionManager->getCollections();
+        const auto cols = collectionManager->getAllCollections();
         if (cols.isEmpty()) {
             auto* e = new QListWidgetItem("  Nenhuma coleção. Crie uma abaixo.");
             e->setForeground(QColor("#666"));
             list->addItem(e);
         } else {
-            for (const QString& c : cols) {
+            for (const auto& c : cols) {
                 auto* item = new QListWidgetItem(
-                    QString("📚  %1").arg(c));
-                item->setData(Qt::UserRole, c);
+                    QString("📁  %1").arg(c.name));
+                item->setData(Qt::UserRole, c.id);
                 list->addItem(item);
             }
         }
@@ -348,12 +355,12 @@ void LibraryScreen::onAddToCollection(const QString& bookTitle)
     connect(newBtn, &QPushButton::clicked, dlg, [&, newEdit]() {
         const QString name = newEdit->text().trimmed();
         if (name.isEmpty()) return;
-        collectionManager->addCollection(name);
+        collectionManager->createCollection(name);
         newEdit->clear();
         fillList();
         // Selecionar automaticamente a nova coleção
         for (int i = 0; i < list->count(); i++) {
-            if (list->item(i)->data(Qt::UserRole).toString() == name) {
+            if (list->item(i)->text().contains(name)) {
                 list->setCurrentRow(i);
                 break;
             }
@@ -369,7 +376,8 @@ void LibraryScreen::onAddToCollection(const QString& bookTitle)
         "QPushButton:pressed{background:#2a8040;}");
     auto* cancelBtn = new QPushButton("Cancelar", dlg);
     cancelBtn->setStyleSheet(
-        "QPushButton{background:#333;color:white;padding:9px 16px;border-radius:6px;font-size:13px;}"
+        "QPushButton{background:#333;color:white;padding:9px 16px;"
+        "border-radius:6px;font-size:13px;}"
         "QPushButton:pressed{background:#555;}");
     btnRow->addWidget(cancelBtn);
     btnRow->addWidget(addBtn);
@@ -378,9 +386,9 @@ void LibraryScreen::onAddToCollection(const QString& bookTitle)
     connect(addBtn, &QPushButton::clicked, dlg, [&, dlg, bookTitle]() {
         QListWidgetItem* cur = list->currentItem();
         if (!cur) return;
-        const QString colName = cur->data(Qt::UserRole).toString();
-        if (colName.isEmpty()) return;   // item placeholder "Nenhuma coleção"
-        collectionManager->addBookToCollection(colName, bookTitle);
+        const int colId = cur->data(Qt::UserRole).toInt();
+        if (colId <= 0) return;  // placeholder "Nenhuma coleção"
+        collectionManager->addBookToCollection(colId, bookTitle);
         dlg->accept();
     });
     connect(cancelBtn, &QPushButton::clicked, dlg, &QDialog::reject);
@@ -388,3 +396,4 @@ void LibraryScreen::onAddToCollection(const QString& bookTitle)
     dlg->exec();
     dlg->deleteLater();
 }
+

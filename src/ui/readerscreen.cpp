@@ -37,65 +37,9 @@ void ReaderScreen::setupUI(){
     mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0,0,0,0);
     mainLayout->setSpacing(0);
-
-    // ORDEM IMPORTA: annotation panel primeiro para noteEdit estar pronto
-    setupAnnotationPanel();
     setupTopBar();
     setupScrollArea();
     setupBottomBar();
-}
-
-void ReaderScreen::setupAnnotationPanel(){
-    annotationPanel = new QWidget(this);
-    annotationPanel->setFixedWidth(300);
-    annotationPanel->setStyleSheet("background:#1c1c1c;border-left:2px solid #2a6434;");
-    annotationPanel->hide();
-
-    auto* pl = new QVBoxLayout(annotationPanel);
-    pl->setContentsMargins(16,16,16,16);
-    pl->setSpacing(12);
-
-    auto* titleLbl = new QLabel(QString::fromUtf8("📝  Anotação"), annotationPanel);
-    titleLbl->setStyleSheet("color:white;font-size:14px;font-weight:bold;");
-    pl->addWidget(titleLbl);
-
-    selTextPreview = new QLabel("", annotationPanel);
-    selTextPreview->setStyleSheet(
-        "color:#ddd;font-size:11px;background:#252525;border-radius:5px;"
-        "padding:8px;border-left:3px solid #FFD700;");
-    selTextPreview->setWordWrap(true);
-    selTextPreview->setMaximumHeight(80);
-    pl->addWidget(selTextPreview);
-
-    auto* noteLbl = new QLabel("Anotação:", annotationPanel);
-    noteLbl->setStyleSheet("color:#aaa;font-size:12px;");
-    pl->addWidget(noteLbl);
-
-    noteEdit = new QTextEdit(annotationPanel);
-    noteEdit->setStyleSheet(
-        "QTextEdit{background:#252525;color:white;border:1px solid #3a3a3a;"
-        "border-radius:5px;padding:6px;font-size:13px;}");
-    noteEdit->setPlaceholderText("Escreva sua anotação aqui...");
-    noteEdit->setMinimumHeight(100);
-    pl->addWidget(noteEdit, 1);
-
-    auto* saveBtn = new QPushButton(QString::fromUtf8("✓  Salvar"), annotationPanel);
-    saveBtn->setFixedHeight(42);
-    saveBtn->setStyleSheet(
-        "QPushButton{background:#1e5c28;color:white;padding:8px;"
-        "border-radius:7px;font-size:13px;font-weight:bold;}"
-        "QPushButton:pressed{background:#2a7a38;}");
-    connect(saveBtn, &QPushButton::clicked, this, &ReaderScreen::onAnnotationPanelSave);
-    pl->addWidget(saveBtn);
-
-    auto* closeBtn = new QPushButton(QString::fromUtf8("✕  Cancelar"), annotationPanel);
-    closeBtn->setFixedHeight(34);
-    closeBtn->setStyleSheet(
-        "QPushButton{background:#2a2a2a;color:#aaa;border-radius:6px;font-size:12px;}"
-        "QPushButton:pressed{background:#444;}");
-    connect(closeBtn, &QPushButton::clicked, this, [this](){ closeAnnotationPanel(); });
-    pl->addWidget(closeBtn);
-    // noteEdit agora está GARANTIDAMENTE inicializado antes do setupTopBar
 }
 
 void ReaderScreen::setupTopBar(){
@@ -106,23 +50,12 @@ void ReaderScreen::setupTopBar(){
         "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
     connect(backButton, &QPushButton::clicked, this, &ReaderScreen::backClicked);
 
-    // Botão ✏ à direita — noteEdit já existe pois setupAnnotationPanel() foi chamado antes
     auto* annotBtn = new QPushButton(QString::fromUtf8("✏"));
     annotBtn->setFixedSize(36,36);
     annotBtn->setStyleSheet(
         "QPushButton{background:transparent;color:white;font-size:18px;border:none;}"
         "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:18px;}");
-    connect(annotBtn, &QPushButton::clicked, this, [this](){
-        if (annotPanelVisible){ closeAnnotationPanel(); return; }
-        pendingAnnotId = -1;
-        pendingSelText.clear();
-        pendingSelPageRects.clear();
-        pendingSelPage = currentPage;
-        noteEdit->clear();
-        selTextPreview->setText(
-            QString::fromUtf8("Página %1 — escreva sua anotação:").arg(currentPage+1));
-        showAnnotationPanel();
-    });
+    connect(annotBtn, &QPushButton::clicked, this, &ReaderScreen::onAddAnnotation);
 
     topBar = TopBarHelper::create(this, backButton, annotBtn);
     mainLayout->addWidget(topBar);
@@ -173,7 +106,6 @@ void ReaderScreen::setupBottomBar(){
     zoomOutBtn->setStyleSheet(btnS);
     connect(zoomOutBtn, &QPushButton::clicked, this, &ReaderScreen::onZoomOut);
 
-    // Centro: "3/315 (0%)"
     pageInfoLabel = new QLabel("", bottomBar);
     pageInfoLabel->setStyleSheet("color:#aaa;font-size:13px;");
     pageInfoLabel->setAlignment(Qt::AlignCenter);
@@ -183,7 +115,6 @@ void ReaderScreen::setupBottomBar(){
     zoomInBtn->setStyleSheet(btnS);
     connect(zoomInBtn, &QPushButton::clicked, this, &ReaderScreen::onZoomIn);
 
-    // Botão lista anotações — único botão à direita
     auto* listBtn = new QPushButton(QString::fromUtf8("📋"), bottomBar);
     listBtn->setFixedSize(36,36);
     listBtn->setStyleSheet(
@@ -200,25 +131,82 @@ void ReaderScreen::setupBottomBar(){
     mainLayout->addWidget(bottomBar);
 }
 
-// ── Salvar anotação do painel lateral ─────────────────────────────────────────
-void ReaderScreen::onAnnotationPanelSave(){
-    if (!bookOpen) { closeAnnotationPanel(); return; }
+// ── Diálogo de anotação (usado tanto pelo ✏ como pela seleção de texto) ───────
+void ReaderScreen::openNoteDialog(int pageIndex, const QString& selText,
+                                   const QList<QRectF>& rects,
+                                   int existingId, const QString& existingNote)
+{
+    auto* dlg = new QDialog(this);
+    dlg->setWindowTitle(existingId >= 0
+        ? QString::fromUtf8("Editar Anotação")
+        : QString::fromUtf8("Nova Anotação"));
+    dlg->setStyleSheet("background:#1a1a1a;color:white;");
+    dlg->resize(500, 340);
 
-    const QString noteText = noteEdit->toPlainText().trimmed();
-    const int page = (pendingSelPage >= 0) ? pendingSelPage : currentPage;
+    auto* dl = new QVBoxLayout(dlg);
+    dl->setContentsMargins(16,16,16,16);
+    dl->setSpacing(10);
 
-    if (pendingAnnotId >= 0){
-        // Editar nota existente
-        annotManager->updateNote(pendingAnnotId, noteText);
+    // Preview do texto selecionado
+    if (!selText.isEmpty()) {
+        auto* prev = new QLabel(selText.left(150) + (selText.length()>150?"…":""), dlg);
+        prev->setStyleSheet(
+            "color:#ddd;font-size:11px;background:#252525;border-radius:5px;"
+            "padding:8px;border-left:3px solid #FFD700;");
+        prev->setWordWrap(true);
+        prev->setMaximumHeight(70);
+        dl->addWidget(prev);
     } else {
-        // Nova nota — salva mesmo que texto esteja vazio (usuário quis criar nota de página)
-        const QString finalNote = noteText.isEmpty() ? "(sem texto)" : noteText;
-        annotManager->addNote(currentTitle, page, finalNote,
-                              pendingSelText, QColor(255,235,59),
-                              pendingSelPageRects);
+        auto* lbl = new QLabel(
+            QString::fromUtf8("Página %1").arg(pageIndex+1), dlg);
+        lbl->setStyleSheet("color:#aaa;font-size:12px;");
+        dl->addWidget(lbl);
     }
-    reloadPageHighlights(page);
-    closeAnnotationPanel();
+
+    auto* te = new QTextEdit(dlg);
+    te->setStyleSheet(
+        "QTextEdit{background:#252525;color:white;border:1px solid #3a3a3a;"
+        "border-radius:5px;padding:6px;font-size:13px;}");
+    te->setPlaceholderText(QString::fromUtf8("Escreva sua anotação aqui..."));
+    if (!existingNote.isEmpty()) te->setText(existingNote);
+    dl->addWidget(te, 1);
+
+    auto* bRow = new QHBoxLayout();
+    auto* ok = new QPushButton(QString::fromUtf8("✓ Salvar"), dlg);
+    ok->setStyleSheet(
+        "QPushButton{background:#1e6432;color:white;padding:10px 20px;"
+        "border-radius:6px;font-size:13px;font-weight:bold;}"
+        "QPushButton:pressed{background:#2a8040;}");
+    auto* cn = new QPushButton("Cancelar", dlg);
+    cn->setStyleSheet(
+        "QPushButton{background:#333;color:white;padding:10px;border-radius:6px;"
+        "font-size:13px;}"
+        "QPushButton:pressed{background:#555;}");
+    connect(ok, &QPushButton::clicked, dlg, &QDialog::accept);
+    connect(cn, &QPushButton::clicked, dlg, &QDialog::reject);
+    bRow->addWidget(cn);
+    bRow->addWidget(ok);
+    dl->addLayout(bRow);
+
+    if (dlg->exec() == QDialog::Accepted) {
+        const QString noteText = te->toPlainText().trimmed();
+        if (existingId >= 0) {
+            annotManager->updateNote(existingId, noteText);
+        } else {
+            const QString finalNote = noteText.isEmpty()
+                ? QString::fromUtf8("(sem texto)") : noteText;
+            annotManager->addNote(currentTitle, pageIndex, finalNote,
+                                  selText, QColor(255,235,59), rects);
+        }
+        reloadPageHighlights(pageIndex);
+    }
+    dlg->deleteLater();
+}
+
+// ── Botão ✏ na topbar → nova nota na página atual ────────────────────────────
+void ReaderScreen::onAddAnnotation(){
+    if (!bookOpen) return;
+    openNoteDialog(currentPage, QString(), QList<QRectF>());
 }
 
 // ── Abertura / Fechamento ─────────────────────────────────────────────────────
@@ -308,30 +296,17 @@ void ReaderScreen::renderVisiblePages(){
 
         connect(pw, &PageWidget::pageTapped, this, &ReaderScreen::onPageTapped);
 
-        // Seleção de texto → abre painel de anotação
+        // Seleção de texto → abre diálogo direto
         connect(pw, &PageWidget::selectionFinished, this,
             [this, pi](const QString& t, const QList<QRectF>& r){
                 if (r.isEmpty()) return;
-                pendingAnnotId      = -1;
-                pendingSelText      = t;
-                pendingSelPageRects = r;
-                pendingSelPage      = pi;
-                noteEdit->clear();
-                selTextPreview->setText(
-                    t.isEmpty() ? "(área selecionada)" : t.left(120) + (t.length()>120?"…":""));
-                showAnnotationPanel();
+                openNoteDialog(pi, t, r);
             });
 
         // Tap no balão → editar nota existente
         connect(pw, &PageWidget::noteMarkerTapped, this,
             [this, pi](int annotId, const QString& noteText){
-                pendingAnnotId      = annotId;
-                pendingSelPage      = pi;
-                pendingSelText.clear();
-                pendingSelPageRects.clear();
-                noteEdit->setText(noteText);
-                selTextPreview->setText("Editando anotação existente:");
-                showAnnotationPanel();
+                openNoteDialog(pi, QString(), QList<QRectF>(), annotId, noteText);
             });
 
         pagesLayout->addWidget(pw, 0, Qt::AlignHCenter);
@@ -370,55 +345,6 @@ void ReaderScreen::onPageTapped(){
     bottomBar->setVisible(topBarVisible);
     scrollArea->setVerticalScrollBarPolicy(
         topBarVisible ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
-    if (annotPanelVisible && !topBarVisible) closeAnnotationPanel();
-}
-
-// ── Painel de anotação ────────────────────────────────────────────────────────
-void ReaderScreen::showAnnotationPanel(){
-    annotPanelVisible = true;
-    const int topH = topBar->isVisible()    ? topBar->height()    : 0;
-    const int botH = bottomBar->isVisible() ? bottomBar->height() : 0;
-    annotationPanel->setGeometry(width()-300, topH, 300, height()-topH-botH);
-    annotationPanel->raise();
-    annotationPanel->show();
-}
-
-void ReaderScreen::closeAnnotationPanel(){
-    annotationPanel->hide();
-    annotPanelVisible = false;
-    pendingAnnotId = -1;
-    pendingSelText.clear();
-    pendingSelPageRects.clear();
-    pendingSelPage = -1;
-    if (noteEdit) noteEdit->clear();
-}
-
-// ── Edição de nota (dialog — chamado da lista) ────────────────────────────────
-void ReaderScreen::openEditNoteDialog(int annotId, const QString& existingNote, int pageIndex){
-    auto* dlg = new QDialog(this);
-    dlg->setWindowTitle("Editar Anotação");
-    dlg->setStyleSheet("background:#1a1a1a;color:white;");
-    dlg->resize(500, 300);
-    auto* dl = new QVBoxLayout(dlg); dl->setSpacing(10);
-    auto* te = new QTextEdit(dlg);
-    te->setStyleSheet(
-        "QTextEdit{background:#252525;color:white;border:1px solid #3a3a3a;"
-        "border-radius:5px;padding:6px;font-size:13px;}");
-    te->setText(existingNote);
-    dl->addWidget(te, 1);
-    auto* bRow = new QHBoxLayout();
-    auto* ok = new QPushButton("✓ Salvar", dlg);
-    ok->setStyleSheet("QPushButton{background:#1e6432;color:white;padding:10px;border-radius:6px;}");
-    auto* cn = new QPushButton("Cancelar", dlg);
-    cn->setStyleSheet("QPushButton{background:#333;color:white;padding:10px;border-radius:6px;}");
-    connect(ok, &QPushButton::clicked, dlg, &QDialog::accept);
-    connect(cn, &QPushButton::clicked, dlg, &QDialog::reject);
-    bRow->addWidget(cn); bRow->addWidget(ok); dl->addLayout(bRow);
-    if (dlg->exec() == QDialog::Accepted){
-        annotManager->updateNote(annotId, te->toPlainText().trimmed());
-        reloadPageHighlights(pageIndex);
-    }
-    dlg->deleteLater();
 }
 
 // ── Lista de Anotações (📋) ───────────────────────────────────────────────────
@@ -488,18 +414,18 @@ void ReaderScreen::onShowAnnotationsList(){
 
     auto* editBtn = new QPushButton(QString::fromUtf8("✏ Editar"), dlg);
     editBtn->setStyleSheet("QPushButton{background:#1e3a6a;color:white;padding:8px;border-radius:6px;}");
-    connect(editBtn, &QPushButton::clicked, dlg, [this, list, fillList](){
+    connect(editBtn, &QPushButton::clicked, dlg, [this, list, &fillList](){
         if (!list->currentItem() || list->count() == 0) return;
         const int     id   = list->currentItem()->data(Qt::UserRole).toInt();
         const int     page = list->currentItem()->data(Qt::UserRole+1).toInt();
         const QString note = list->currentItem()->data(Qt::UserRole+2).toString();
-        openEditNoteDialog(id, note, page);
+        openNoteDialog(page, QString(), QList<QRectF>(), id, note);
         fillList();
     });
 
     auto* delBtn = new QPushButton(QString::fromUtf8("🗑 Excluir"), dlg);
     delBtn->setStyleSheet("QPushButton{background:#7a1010;color:white;padding:8px;border-radius:6px;}");
-    connect(delBtn, &QPushButton::clicked, dlg, [this, list, fillList](){
+    connect(delBtn, &QPushButton::clicked, dlg, [this, list, &fillList](){
         if (!list->currentItem() || list->count() == 0) return;
         const int id   = list->currentItem()->data(Qt::UserRole).toInt();
         const int page = list->currentItem()->data(Qt::UserRole+1).toInt();
@@ -633,5 +559,4 @@ void ReaderScreen::keyPressEvent(QKeyEvent* e){
 void ReaderScreen::resizeEvent(QResizeEvent* e){
     QWidget::resizeEvent(e);
     if (bookOpen) renderVisiblePages();
-    if (annotPanelVisible) showAnnotationPanel();
 }

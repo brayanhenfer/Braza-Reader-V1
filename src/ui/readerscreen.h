@@ -43,22 +43,23 @@ private slots:
     void onScrollDebounced();
     void onShowAnnotationsList();
     void onPageTapped();
-    void onAnnotationPanelSave();
+    void onAddAnnotation();   // botão ✏ topbar → diálogo nova nota na página atual
 
 private:
     void setupUI();
     void setupTopBar();
     void setupScrollArea();
     void setupBottomBar();
-    void setupAnnotationPanel();
     void renderVisiblePages();
     void expandWindowForward();
     void expandWindowBackward();
     void loadHighlightsForPage(PageWidget* pw, int pageIndex);
     void reloadPageHighlights(int pageIndex);
-    void showAnnotationPanel();
-    void closeAnnotationPanel();
-    void openEditNoteDialog(int annotId, const QString& existingNote, int pageIndex);
+    // Abre diálogo de anotação (nova ou edição)
+    void openNoteDialog(int pageIndex, const QString& selText,
+                        const QList<QRectF>& rects,
+                        int existingId = -1,
+                        const QString& existingNote = QString());
     void updatePageInfo();
     int  scrollPositionForPage(int localIndex) const;
 
@@ -76,16 +77,7 @@ private:
     QPushButton* zoomOutBtn    = nullptr;
     QLabel*      pageInfoLabel = nullptr;
 
-    QWidget*   annotationPanel  = nullptr;
-    QLabel*    selTextPreview   = nullptr;
-    QTextEdit* noteEdit         = nullptr;
-    bool       annotPanelVisible = false;
-
-    int           pendingAnnotId   = -1;   // >= 0 = editando existente
-    QString       pendingSelText;
-    QList<QRectF> pendingSelPageRects;
-    int           pendingSelPage = -1;
-    QTimer*       scrollDebounce = nullptr;
+    QTimer* scrollDebounce = nullptr;
 
     std::unique_ptr<PDFRenderer>       renderer;
     std::unique_ptr<ProgressManager>   progressManager;
