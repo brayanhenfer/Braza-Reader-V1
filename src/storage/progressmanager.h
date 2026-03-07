@@ -9,9 +9,10 @@ public:
     ProgressManager();
     ~ProgressManager();
 
-    int getLastPage(const QString& bookTitle) const;
+    int  getLastPage(const QString& bookTitle) const;
     void saveProgress(const QString& bookTitle, int pageNumber);
     void clearProgress(const QString& bookTitle);
+    void renameTitle(const QString& oldTitle, const QString& newTitle);
 
 private:
     void initializeDatabase();

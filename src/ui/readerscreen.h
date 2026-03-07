@@ -1,5 +1,4 @@
 #pragma once
-
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -7,17 +6,14 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QTextEdit>
 #include <QColor>
 #include <QTimer>
 #include <QRectF>
 #include <memory>
-
 #include "pagewidget.h"
 
-class PDFRenderer;
-class PDFLoader;
-class ProgressManager;
-class AnnotationManager;
+class PDFRenderer; class PDFLoader; class ProgressManager; class AnnotationManager;
 
 class ReaderScreen : public QWidget
 {
@@ -32,6 +28,7 @@ public:
     void applyNightMode(bool enabled);
     void setAmberIntensity(int v);
     void setSepiaEnabled(bool e);
+    void setAppBgColor(const QColor& color);
 
 signals:
     void backClicked();
@@ -41,18 +38,12 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private slots:
-    void onPreviousPage();
-    void onNextPage();
-    void onZoomIn();
-    void onZoomOut();
-    void onToggleAnnotationPanel();
+    void onPreviousPage(); void onNextPage();
+    void onZoomIn();       void onZoomOut();
     void onScrollDebounced();
-    void onToggleBookmark();
     void onShowAnnotationsList();
-    void onPageTapped();   // FIX: recebe sinal de tap do PageWidget
-    void onSelectionFinished(const QString& text,
-                              const QList<QRectF>& pageRects,
-                              int pageIndex);
+    void onPageTapped();
+    void onAnnotationPanelSave();
 
 private:
     void setupUI();
@@ -60,7 +51,6 @@ private:
     void setupScrollArea();
     void setupBottomBar();
     void setupAnnotationPanel();
-
     void renderVisiblePages();
     void expandWindowForward();
     void expandWindowBackward();
@@ -68,57 +58,47 @@ private:
     void reloadPageHighlights(int pageIndex);
     void showAnnotationPanel();
     void closeAnnotationPanel();
-    void openNoteDialog(int annotId, const QString& selText,
-                        const QList<QRectF>& pageRects, int pageIndex,
-                        const QString& existingNote);
+    void openEditNoteDialog(int annotId, const QString& existingNote, int pageIndex);
     void updatePageInfo();
-    void updateProgressBar();
     int  scrollPositionForPage(int localIndex) const;
 
-    // Layout
-    QVBoxLayout*       mainLayout      = nullptr;
-    QWidget*           topBar          = nullptr;
-    QPushButton*       backButton      = nullptr;
-    QLabel*            pageInfoLabel   = nullptr;
-    QPushButton*       annotBtn        = nullptr;
+    QVBoxLayout* mainLayout    = nullptr;
+    QWidget*     topBar        = nullptr;
+    QPushButton* backButton    = nullptr;
 
     QScrollArea*       scrollArea      = nullptr;
     QWidget*           pagesContainer  = nullptr;
     QVBoxLayout*       pagesLayout     = nullptr;
     QList<PageWidget*> pageWidgets;
 
-    QWidget*           bottomBar       = nullptr;
-    QPushButton*       zoomInBtn       = nullptr;
-    QPushButton*       zoomOutBtn      = nullptr;
-    QPushButton*       bookmarkBtn     = nullptr;
-    QLabel*            progressLabel   = nullptr;
+    QWidget*     bottomBar     = nullptr;
+    QPushButton* zoomInBtn     = nullptr;
+    QPushButton* zoomOutBtn    = nullptr;
+    QLabel*      pageInfoLabel = nullptr;
 
-    QWidget*           annotationPanel = nullptr;
-    QLabel*            selTextPreview  = nullptr;
-    QLabel*            hlColorPreview  = nullptr;
-    QColor             currentHighlightColor{255, 235, 59};
-    bool               annotPanelVisible = false;
+    QWidget*   annotationPanel  = nullptr;
+    QLabel*    selTextPreview   = nullptr;
+    QTextEdit* noteEdit         = nullptr;
+    bool       annotPanelVisible = false;
 
-    QString            pendingSelText;
-    QList<QRectF>      pendingSelPageRects;
-    int                pendingSelPage = -1;
-
-    QTimer*            scrollDebounce = nullptr;
+    int           pendingAnnotId   = -1;   // >= 0 = editando existente
+    QString       pendingSelText;
+    QList<QRectF> pendingSelPageRects;
+    int           pendingSelPage = -1;
+    QTimer*       scrollDebounce = nullptr;
 
     std::unique_ptr<PDFRenderer>       renderer;
     std::unique_ptr<ProgressManager>   progressManager;
     std::unique_ptr<AnnotationManager> annotManager;
 
-    QString currentFilePath;
-    QString currentTitle;
-    int     currentPage    = 0;
-    int     totalPages     = 0;
-    float   zoomFactor     = 1.0f;
-    bool    bookOpen       = false;
-    bool    topBarVisible  = true;
+    QString currentFilePath, currentTitle;
+    int     currentPage  = 0;
+    int     totalPages   = 0;
+    float   zoomFactor   = 1.0f;
+    bool    bookOpen     = false;
+    bool    topBarVisible= true;
     int     amberIntensity = 0;
     bool    sepiaEnabled   = false;
-
-    int  windowStart = 0;
+    int     windowStart    = 0;
     static constexpr int MAX_LOADED = 4;
 };

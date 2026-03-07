@@ -4,38 +4,38 @@
 #include <QSettings>
 #include <memory>
 
-class SettingsManager
-{
+class SettingsManager {
 public:
     SettingsManager();
     ~SettingsManager();
 
-    // Cor do menu (topbar)
     QColor getMenuColor() const;
-    void   setMenuColor(const QColor& c);
+    void   setMenuColor(const QColor& color);
 
-    // Cor de fundo do app (tela toda, "atrás" do conteúdo)
+    // Cor de fundo do app (painel/grade)
     QColor getBgColor() const;
-    void   setBgColor(const QColor& c);
+    void   setBgColor(const QColor& color);
 
-    // Cor de janela (cards, grades internas, painéis)
+    // Alias mantido para compatibilidade interna
+    QColor getAppBgColor() const;
+    void   setAppBgColor(const QColor& color);
+
+    // Cor de janela (cards/painéis internos)
     QColor getWindowColor() const;
-    void   setWindowColor(const QColor& c);
+    void   setWindowColor(const QColor& color);
+
+    // Brilho (0-100)
+    int  getBrightness() const;
+    void setBrightness(int v);
 
     bool getNightMode() const;
-    void setNightMode(bool e);
-
-    bool getSepiaEnabled() const;
-    void setSepiaEnabled(bool e);
+    void setNightMode(bool enabled);
 
     int  getAmberIntensity() const;
     void setAmberIntensity(int v);
 
-    int  getBrightness() const;
-    void setBrightness(int v);
-
-    int  getFontSize() const;
-    void setFontSize(int s);
+    bool getSepiaEnabled() const;
+    void setSepiaEnabled(bool e);
 
     void resetToDefaults();
 

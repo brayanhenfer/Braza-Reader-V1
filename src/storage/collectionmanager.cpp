@@ -5,155 +5,129 @@
 CollectionManager::CollectionManager() : database(nullptr) { initializeDatabase(); }
 CollectionManager::~CollectionManager() { if (database) sqlite3_close(database); }
 
-QString CollectionManager::getDatabasePath() const
-{
-    QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/brazareader";
-    QDir().mkpath(path);
-    return path + "/collections.db";
+QString CollectionManager::getDatabasePath() const {
+    QString dataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/brazareader";
+    QDir().mkpath(dataPath);
+    return dataPath + "/collections.db";
 }
 
-void CollectionManager::initializeDatabase()
-{
-    if (sqlite3_open(getDatabasePath().toStdString().c_str(), &database) == SQLITE_OK)
+void CollectionManager::initializeDatabase() {
+    if (sqlite3_open(getDatabasePath().toStdString().c_str(), &database) == SQLITE_OK) {
+        sqlite3_exec(database, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);
+        sqlite3_exec(database, "PRAGMA synchronous=NORMAL;", nullptr, nullptr, nullptr);
         createTablesIfNeeded();
+    }
 }
 
-void CollectionManager::createTablesIfNeeded()
-{
-    const char* sql = R"(
+void CollectionManager::createTablesIfNeeded() {
+    const char* sql = R"sql(
         CREATE TABLE IF NOT EXISTS collections (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            name       TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL
         );
         CREATE TABLE IF NOT EXISTS collection_books (
-            collection_id INTEGER NOT NULL,
-            book_title    TEXT NOT NULL,
-            added_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (collection_id, book_title),
-            FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            collection_name TEXT NOT NULL,
+            book_title      TEXT NOT NULL,
+            UNIQUE(collection_name, book_title)
         );
-    )";
+    )sql";
     char* err = nullptr;
     sqlite3_exec(database, sql, nullptr, nullptr, &err);
     if (err) sqlite3_free(err);
 }
 
-int CollectionManager::createCollection(const QString& name)
-{
-    if (!database) return -1;
-    const char* sql = "INSERT OR IGNORE INTO collections (name) VALUES (?);";
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return -1;
-    sqlite3_bind_text(stmt, 1, name.toStdString().c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    return static_cast<int>(sqlite3_last_insert_rowid(database));
-}
-
-void CollectionManager::renameCollection(int id, const QString& newName)
-{
-    if (!database) return;
-    const char* sql = "UPDATE collections SET name=? WHERE id=?;";
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return;
-    sqlite3_bind_text(stmt, 1, newName.toStdString().c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt, 2, id);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-}
-
-void CollectionManager::deleteCollection(int id)
-{
-    if (!database) return;
-    // ON DELETE CASCADE remove os membros automaticamente
-    const char* sql = "DELETE FROM collections WHERE id=?;";
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return;
-    sqlite3_bind_int(stmt, 1, id);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-}
-
-QList<Collection> CollectionManager::getAllCollections() const
-{
-    QList<Collection> list;
+QStringList CollectionManager::getCollections() const {
+    QStringList list;
     if (!database) return list;
-    const char* sql = "SELECT id, name, created_at FROM collections ORDER BY name;";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return list;
+    if (sqlite3_prepare_v2(database, "SELECT name FROM collections ORDER BY name;", -1, &stmt, nullptr) != SQLITE_OK)
+        return list;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        Collection c;
-        c.id        = sqlite3_column_int(stmt, 0);
-        c.name      = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
-        c.createdAt = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)));
-        list.append(c);
+        const char* n = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (n) list.append(QString::fromUtf8(n));
     }
     sqlite3_finalize(stmt);
     return list;
 }
 
-void CollectionManager::addBookToCollection(int collectionId, const QString& bookTitle)
-{
+void CollectionManager::addCollection(const QString& name) {
     if (!database) return;
-    const char* sql = "INSERT OR IGNORE INTO collection_books (collection_id, book_title) VALUES (?, ?);";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return;
-    sqlite3_bind_int(stmt, 1, collectionId);
-    sqlite3_bind_text(stmt, 2, bookTitle.toStdString().c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
+    if (sqlite3_prepare_v2(database, "INSERT OR IGNORE INTO collections (name) VALUES (?);", -1, &stmt, nullptr) != SQLITE_OK) return;
+    const QByteArray utf8 = name.toUtf8();
+    sqlite3_bind_text(stmt, 1, utf8.constData(), utf8.size(), SQLITE_TRANSIENT);
+    sqlite3_step(stmt); sqlite3_finalize(stmt);
 }
 
-void CollectionManager::removeBookFromCollection(int collectionId, const QString& bookTitle)
-{
+void CollectionManager::removeCollection(const QString& name) {
     if (!database) return;
-    const char* sql = "DELETE FROM collection_books WHERE collection_id=? AND book_title=?;";
+    const QByteArray utf8 = name.toUtf8();
+
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return;
-    sqlite3_bind_int(stmt, 1, collectionId);
-    sqlite3_bind_text(stmt, 2, bookTitle.toStdString().c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
+    if (sqlite3_prepare_v2(database, "DELETE FROM collection_books WHERE collection_name = ?;", -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, utf8.constData(), utf8.size(), SQLITE_TRANSIENT);
+        sqlite3_step(stmt); sqlite3_finalize(stmt);
+    }
+    if (sqlite3_prepare_v2(database, "DELETE FROM collections WHERE name = ?;", -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, utf8.constData(), utf8.size(), SQLITE_TRANSIENT);
+        sqlite3_step(stmt); sqlite3_finalize(stmt);
+    }
 }
 
-QStringList CollectionManager::getBooksInCollection(int collectionId) const
-{
+void CollectionManager::addBookToCollection(const QString& collection, const QString& bookTitle) {
+    if (!database) return;
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(database,
+        "INSERT OR IGNORE INTO collection_books (collection_name, book_title) VALUES (?, ?);",
+        -1, &stmt, nullptr) != SQLITE_OK) return;
+    const QByteArray col  = collection.toUtf8();
+    const QByteArray book = bookTitle.toUtf8();
+    sqlite3_bind_text(stmt, 1, col.constData(),  col.size(),  SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, book.constData(), book.size(), SQLITE_TRANSIENT);
+    sqlite3_step(stmt); sqlite3_finalize(stmt);
+}
+
+void CollectionManager::removeBookFromCollection(const QString& collection, const QString& bookTitle) {
+    if (!database) return;
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(database,
+        "DELETE FROM collection_books WHERE collection_name = ? AND book_title = ?;",
+        -1, &stmt, nullptr) != SQLITE_OK) return;
+    const QByteArray col  = collection.toUtf8();
+    const QByteArray book = bookTitle.toUtf8();
+    sqlite3_bind_text(stmt, 1, col.constData(),  col.size(),  SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, book.constData(), book.size(), SQLITE_TRANSIENT);
+    sqlite3_step(stmt); sqlite3_finalize(stmt);
+}
+
+QStringList CollectionManager::getBooksInCollection(const QString& collection) const {
     QStringList list;
     if (!database) return list;
-    const char* sql = "SELECT book_title FROM collection_books WHERE collection_id=? ORDER BY book_title;";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return list;
-    sqlite3_bind_int(stmt, 1, collectionId);
-    while (sqlite3_step(stmt) == SQLITE_ROW)
-        list.append(QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0))));
+    if (sqlite3_prepare_v2(database,
+        "SELECT book_title FROM collection_books WHERE collection_name = ? ORDER BY book_title;",
+        -1, &stmt, nullptr) != SQLITE_OK) return list;
+    const QByteArray utf8 = collection.toUtf8();
+    sqlite3_bind_text(stmt, 1, utf8.constData(), utf8.size(), SQLITE_TRANSIENT);
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* t = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (t) list.append(QString::fromUtf8(t));
+    }
     sqlite3_finalize(stmt);
     return list;
 }
 
-QList<int> CollectionManager::getCollectionsForBook(const QString& bookTitle) const
-{
-    QList<int> ids;
-    if (!database) return ids;
-    const char* sql = "SELECT collection_id FROM collection_books WHERE book_title=?;";
+void CollectionManager::renameBookTitle(const QString& oldTitle, const QString& newTitle) {
+    if (!database) return;
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return ids;
-    sqlite3_bind_text(stmt, 1, bookTitle.toStdString().c_str(), -1, SQLITE_TRANSIENT);
-    while (sqlite3_step(stmt) == SQLITE_ROW)
-        ids.append(sqlite3_column_int(stmt, 0));
+    if (sqlite3_prepare_v2(database,
+        "UPDATE collection_books SET book_title = ? WHERE book_title = ?;",
+        -1, &stmt, nullptr) != SQLITE_OK) return;
+    const QByteArray n = newTitle.toUtf8();
+    const QByteArray o = oldTitle.toUtf8();
+    sqlite3_bind_text(stmt, 1, n.constData(), n.size(), SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, o.constData(), o.size(), SQLITE_TRANSIENT);
+    sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    return ids;
-}
-
-bool CollectionManager::isBookInCollection(int collectionId, const QString& bookTitle) const
-{
-    if (!database) return false;
-    const char* sql = "SELECT COUNT(*) FROM collection_books WHERE collection_id=? AND book_title=?;";
-    sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(database, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
-    sqlite3_bind_int(stmt, 1, collectionId);
-    sqlite3_bind_text(stmt, 2, bookTitle.toStdString().c_str(), -1, SQLITE_TRANSIENT);
-    bool has = (sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int(stmt, 0) > 0);
-    sqlite3_finalize(stmt);
-    return has;
 }

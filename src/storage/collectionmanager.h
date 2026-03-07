@@ -1,39 +1,23 @@
 #pragma once
-
 #include <QString>
 #include <QStringList>
-#include <QList>
 #include <sqlite3.h>
+#include <memory>
 
-struct Collection {
-    int     id;
-    QString name;
-    QString createdAt;
-};
-
-class CollectionManager
-{
+class CollectionManager {
 public:
     CollectionManager();
     ~CollectionManager();
-
-    // Coleções
-    int              createCollection(const QString& name);
-    void             renameCollection(int collectionId, const QString& newName);
-    void             deleteCollection(int collectionId);
-    QList<Collection> getAllCollections() const;
-
-    // Membros
-    void        addBookToCollection(int collectionId, const QString& bookTitle);
-    void        removeBookFromCollection(int collectionId, const QString& bookTitle);
-    QStringList getBooksInCollection(int collectionId) const;
-    QList<int>  getCollectionsForBook(const QString& bookTitle) const;
-    bool        isBookInCollection(int collectionId, const QString& bookTitle) const;
-
+    QStringList getCollections() const;
+    void addCollection(const QString& name);
+    void removeCollection(const QString& name);
+    void addBookToCollection(const QString& collection, const QString& bookTitle);
+    void removeBookFromCollection(const QString& collection, const QString& bookTitle);
+    QStringList getBooksInCollection(const QString& collection) const;
+    void renameBookTitle(const QString& oldTitle, const QString& newTitle);
 private:
-    void    initializeDatabase();
-    void    createTablesIfNeeded();
+    void initializeDatabase();
+    void createTablesIfNeeded();
     QString getDatabasePath() const;
-
-    sqlite3* database;
+    sqlite3* database = nullptr;
 };

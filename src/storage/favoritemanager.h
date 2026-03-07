@@ -15,6 +15,7 @@ public:
     void addFavorite(const QString& bookTitle);
     void removeFavorite(const QString& bookTitle);
     QStringList getAllFavorites() const;
+    void renameTitle(const QString& oldTitle, const QString& newTitle);
 
 private:
     void initializeDatabase();
