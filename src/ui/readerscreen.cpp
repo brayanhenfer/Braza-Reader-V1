@@ -50,11 +50,12 @@ void ReaderScreen::setupTopBar(){
         "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:20px;}");
     connect(backButton, &QPushButton::clicked, this, &ReaderScreen::backClicked);
 
-    auto* annotBtn = new QPushButton(QString::fromUtf8("✏"));
-    annotBtn->setFixedSize(36,36);
+    auto* annotBtn = new QPushButton("+ Nota");
+    annotBtn->setFixedSize(64,34);
     annotBtn->setStyleSheet(
-        "QPushButton{background:transparent;color:white;font-size:18px;border:none;}"
-        "QPushButton:pressed{background:rgba(255,255,255,0.2);border-radius:18px;}");
+        "QPushButton{background:#1e5c28;color:white;font-size:11px;font-weight:bold;"
+        "border-radius:6px;border:1px solid #2a8040;}"
+        "QPushButton:pressed{background:#2a8040;}");
     connect(annotBtn, &QPushButton::clicked, this, &ReaderScreen::onAddAnnotation);
 
     topBar = TopBarHelper::create(this, backButton, annotBtn);
@@ -115,11 +116,12 @@ void ReaderScreen::setupBottomBar(){
     zoomInBtn->setStyleSheet(btnS);
     connect(zoomInBtn, &QPushButton::clicked, this, &ReaderScreen::onZoomIn);
 
-    auto* listBtn = new QPushButton(QString::fromUtf8("📋"), bottomBar);
-    listBtn->setFixedSize(36,36);
+    auto* listBtn = new QPushButton("Not.", bottomBar);
+    listBtn->setFixedSize(44,36);
     listBtn->setStyleSheet(
-        "QPushButton{background:transparent;color:white;font-size:18px;border:none;}"
-        "QPushButton:pressed{background:rgba(255,255,255,0.15);border-radius:18px;}");
+        "QPushButton{background:#2a3a5c;color:white;font-size:10px;font-weight:bold;"
+        "border-radius:5px;border:1px solid #3a5a8a;}"
+        "QPushButton:pressed{background:#1e2a4a;}");
     connect(listBtn, &QPushButton::clicked, this, &ReaderScreen::onShowAnnotationsList);
 
     lay->addWidget(zoomOutBtn);
@@ -356,7 +358,7 @@ void ReaderScreen::onShowAnnotationsList(){
     dlg->resize(660, 540);
     auto* lay = new QVBoxLayout(dlg); lay->setSpacing(10);
 
-    auto* hdr = new QLabel(QString::fromUtf8("📋  ") + currentTitle, dlg);
+    auto* hdr = new QLabel(currentTitle, dlg);
     hdr->setStyleSheet("color:white;font-size:15px;font-weight:bold;");
     lay->addWidget(hdr);
 
@@ -372,7 +374,8 @@ void ReaderScreen::onShowAnnotationsList(){
         const auto anns = annotManager->getAllAnnotations(currentTitle);
         bool hasAny = false;
         for (const Annotation& a : anns){
-            if (a.type == Annotation::Bookmark) continue;
+            // Mostrar apenas notas (tipo 1) — ignorar highlights, bookmarks, underlines
+            if (a.type != Annotation::Note) continue;
             hasAny = true;
             QString body = a.selectedText.left(90);
             if (!a.noteText.isEmpty())
@@ -397,7 +400,7 @@ void ReaderScreen::onShowAnnotationsList(){
 
     auto* btnRow = new QHBoxLayout();
 
-    auto* goBtn = new QPushButton(QString::fromUtf8("↗ Ir para Página"), dlg);
+    auto* goBtn = new QPushButton("Ir para Pagina", dlg);
     goBtn->setStyleSheet("QPushButton{background:#1e6432;color:white;padding:8px;border-radius:6px;}");
     connect(goBtn, &QPushButton::clicked, dlg, [this, list, dlg](){
         if (!list->currentItem() || list->count() == 0) return;
@@ -412,7 +415,7 @@ void ReaderScreen::onShowAnnotationsList(){
         });
     });
 
-    auto* editBtn = new QPushButton(QString::fromUtf8("✏ Editar"), dlg);
+    auto* editBtn = new QPushButton("Editar", dlg);
     editBtn->setStyleSheet("QPushButton{background:#1e3a6a;color:white;padding:8px;border-radius:6px;}");
     connect(editBtn, &QPushButton::clicked, dlg, [this, list, &fillList](){
         if (!list->currentItem() || list->count() == 0) return;
@@ -423,7 +426,7 @@ void ReaderScreen::onShowAnnotationsList(){
         fillList();
     });
 
-    auto* delBtn = new QPushButton(QString::fromUtf8("🗑 Excluir"), dlg);
+    auto* delBtn = new QPushButton("Excluir", dlg);
     delBtn->setStyleSheet("QPushButton{background:#7a1010;color:white;padding:8px;border-radius:6px;}");
     connect(delBtn, &QPushButton::clicked, dlg, [this, list, &fillList](){
         if (!list->currentItem() || list->count() == 0) return;

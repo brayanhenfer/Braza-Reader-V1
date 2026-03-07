@@ -219,13 +219,14 @@ void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
     const QString fp = filePath;
     connect(renameBtn, &QPushButton::clicked, this, [this, fp]() { onRenameBook(fp); });
 
-    // Coleção — emoji 📚
-    QPushButton* collBtn = new QPushButton(QString::fromUtf8("📚"), card);
-    collBtn->setFixedSize(28, 28);
+    // Coleção — texto curto que renderiza em qualquer fonte
+    QPushButton* collBtn = new QPushButton("Col", card);
+    collBtn->setFixedSize(36, 28);
     collBtn->setToolTip("Adicionar à coleção");
     collBtn->setStyleSheet(
-        "QPushButton{background:transparent;color:white;font-size:16px;border:none;}"
-        "QPushButton:pressed{background:rgba(255,255,255,0.15);border-radius:4px;}");
+        "QPushButton{background:#2a5c3a;color:white;font-size:10px;font-weight:bold;"
+        "border-radius:4px;border:1px solid #3a8a50;}"
+        "QPushButton:pressed{background:#1e6432;}");
     connect(collBtn, &QPushButton::clicked, this, [this, bkTitle]() { onAddToCollection(bkTitle); });
 
     buttonBar->addWidget(favBtn);
@@ -238,8 +239,9 @@ void LibraryScreen::addBookCard(const QString& filePath, int row, int col)
     cardLayout->addWidget(progressRow);
     cardLayout->addLayout(buttonBar);
 
+    // Overlay cobre apenas a área da thumbnail (sem cobrir a barra de botões)
     QPushButton* openOverlay = new QPushButton(card);
-    openOverlay->setGeometry(0, 0, 220, 245);
+    openOverlay->setGeometry(0, 0, 220, 220);
     openOverlay->setStyleSheet("background:transparent; border:none;");
     favBtn->raise();
     renameBtn->raise();

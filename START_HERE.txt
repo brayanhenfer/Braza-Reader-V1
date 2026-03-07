@@ -4,6 +4,8 @@
 
 Welcome to BrazaReader - A lightweight PDF reader for Raspberry Pi Zero!
 
+Before using the software read the terms on TERMS.docx.
+
 This project contains everything you need to build and run a PDF reader
 optimized for ARMv6 devices with minimal hardware resources.
 

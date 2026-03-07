@@ -118,11 +118,11 @@ void SidebarMenu::setupUI(){
     mainLayout=new QVBoxLayout(this); mainLayout->setContentsMargins(0,0,0,0); mainLayout->setSpacing(0);
 
     // Cabeçalho com logo
-    headerLabel=new QLabel(this); headerLabel->setFixedHeight(96); headerLabel->setAlignment(Qt::AlignCenter);
+    headerLabel=new QLabel(this); headerLabel->setFixedHeight(110); headerLabel->setAlignment(Qt::AlignCenter);
     headerLabel->setStyleSheet("background:rgba(0,0,0,0.30);");
     QPixmap lp(":/logo.png");
     if(!lp.isNull())
-        headerLabel->setPixmap(lp.scaled(190, 72, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        headerLabel->setPixmap(lp.scaled(220, 90, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     else{ headerLabel->setText("BrazaReader");
           headerLabel->setStyleSheet("color:white;font-size:22px;font-weight:bold;background:rgba(0,0,0,0.30);"); }
     mainLayout->addWidget(headerLabel);

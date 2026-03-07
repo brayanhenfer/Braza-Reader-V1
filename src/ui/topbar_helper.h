@@ -14,7 +14,7 @@ inline QWidget* create(QWidget* parent,
                         const QColor& color   = QColor("#1e6432"))
 {
     QWidget* bar = new QWidget(parent);
-    bar->setFixedHeight(60);  // altura aumentada para acomodar logo maior
+    bar->setFixedHeight(64);  // altura aumentada para acomodar logo maior
     bar->setStyleSheet(QString("background-color:%1;").arg(color.name()));
 
     QHBoxLayout* lay = new QHBoxLayout(bar);
@@ -38,8 +38,8 @@ inline QWidget* create(QWidget* parent,
     logo->setAlignment(Qt::AlignCenter);
     QPixmap px(":/logo.png");
     if (!px.isNull()) {
-        // Escala mantendo proporção — altura 50px para logo maior e nítida
-        logo->setPixmap(px.scaled(220, 50, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        // Escala mantendo proporção — altura 56px para logo maior e nítida
+        logo->setPixmap(px.scaled(260, 56, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     } else {
         logo->setText("BrazaReader");
         logo->setStyleSheet("color:white;font-size:18px;font-weight:bold;");
